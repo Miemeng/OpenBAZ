@@ -1,0 +1,33 @@
+# ============================================================
+# 稀有度 YAML 模板 v0.1
+# 依据：《规则说明书 v0.9》§13、《YAML数据格式规范.md》§6
+# 用法：复制本文件为 packs/<pack_id>/rarities.yml，并在同目录 pack.yml 中声明
+#       rarities 来源为本文件（自定义品阶包必填；只用内置四品阶的包可省略，
+#       由 pack.yml 的 rarities.source: builtin 声明）
+# 校验：卡牌 rarity 必须引用本表已登记的品阶 id；upgrade 链须包含全部品阶、无环
+# ============================================================
+
+rarities:
+  - id: bronze              # 品阶 id：小写字母 + 数字 + 下划线，被卡牌 rarity 字段引用
+    name: 青铜              # 显示名
+    color: "#8d6e63"        # 卡面主色（十六进制）
+    # frame: 缺省 = 品阶纯色卡框；自定义卡框填图片资源 id（images/ 下文件名）
+  - id: silver
+    name: 白银
+    color: "#b0bec5"
+  - id: gold
+    name: 黄金
+    color: "#ffc107"
+  - id: diamond
+    name: 钻石
+    color: "#00e5ff"
+    frame: diamond_frame    # 示例：钻石品阶使用专用卡框资源
+  # 自定义品阶示例：
+  # - id: ruby
+  #   name: 红宝石
+  #   color: "#e0115f"
+  #   frame: ruby_frame
+
+upgrade: [bronze, silver, gold, diamond]   # 二合一合成链，按升序书写；
+                                           # 自定义品阶插入此链（如 [bronze, silver, ruby, diamond]）
+#TODO: 全量模拟模式后，为稀有度增加卡牌出现的天数

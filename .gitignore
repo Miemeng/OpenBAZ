@@ -1,0 +1,22 @@
+# 依赖与产物
+node_modules/
+dist/
+
+# 日志与临时文件
+*.log
+npm-debug.log*
+.vite/
+coverage/
+
+# 探针 / 诊断输出（如 simulator/__probe_trace__.out.txt）
+*.out.txt
+
+# 编辑器 / 系统
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# 注意：packs/ skills/ drafts/ decks/ rarities.yml 是**工作区数据，必须入库**（框架 §3）
+#      不要把它们当作构建产物忽略掉。

@@ -1,0 +1,29 @@
+{
+  // 单包（非 monorepo）；边界靠 ESLint 导入限制强制，不靠包 —— 见 AGENT.md §3 / §5.4
+  // 语法子集：只写"可擦除语法"，三条链路取交集（node 原生擦除 / Vitest-esbuild / tsc）
+  // —— 见框架设计 §2.5.3 与 AGENT.md §5.4；本文件不得加入 paths 别名（Node 不读 tsconfig）
+  "compilerOptions": {
+    "target": "esnext",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["node"],
+    "noEmit": true,
+    "allowImportingTsExtensions": true,
+    "erasableSyntaxOnly": true,
+    "verbatimModuleSyntax": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true
+  },
+  "include": ["engine/**/*.ts", "cards/**/*.ts", "simulator/**/*.ts"],
+  // client/ 用独立配置（要 jsx、不参与 Node 直跑）；client/**/*.tsx 是 Node 类型擦除明确不支持的格式
+  "exclude": ["node_modules", "dist", "client"]
+}

@@ -1,0 +1,201 @@
+# ============================================================
+# 卡牌 YAML 模板 v0.3.4
+# 依据：《规则说明书 v0.9》《卡牌模拟器框架设计 v0.10》§6
+# 用法：复制本文件为 packs/<pack_id>/<card_id>.yml 或 drafts/<card_id>.yml 后修改
+# 校验：cards/schema.ts 与本模板保持同步；保存即热加载，校验失败不覆盖旧版本
+# ============================================================
+
+# ---------- 基础信息（必填）----------
+
+id: my_card            # 唯一 id：小写字母 + 数字 + 下划线，全局唯一，必须与文件名一致，卡牌贴图格式为png，同唯一id相同
+name: 新卡牌            # 显示名
+version: 1             # 版本号，≥1；每次修改任意字段必须 +1，旧版本保留用于追溯
+size: small            # small=1格 / medium=2格 / large=3格
+cooldown: 5.00         # 冷却时间（单位：s），若为-1，则为纯被动物品
+rarity: bronze         # 品阶 id，表示这张卡的最低品质，引用 rarities.yml：bronze / silver / gold / diamond 或自定义
+
+# ---------- 扩展信息（选填）----------
+
+description: 一张模板  # 卡牌描述，小字显示在悬浮窗内
+# slots: 2              # 选填：覆盖 size 推导的占位格数，≥1
+                       # 摆盘合法性：目标连续格全部为空且不越界（模拟模式只校验几何）
+# owner: hero_mage      # 卡牌归属角色 id（规则 §17：角色与卡包关系）
+# frame: my_frame       # 自定义卡框资源 id，默认用品阶默认卡框
+
+# ---------- 数值 ----------
+
+stats:
+# speed: 1.0           # 行动条速度，默认为1，一般不修改（gauge 推进速率；受加速×2 / 减速×0.5 / 冰冻=0 影响）
+# cdp: 100.0           # 冷却百分比系数（缺省 100 = 无修正；cooldown = -1 的纯被动无行动条，无需填写）
+                       # 最终充满周期 = cooldown × (cdp ÷ 100) ÷ 速度倍率（规则 §5 v0.9）
+                       # 多个百分比修正加算：减 10% 与减 5% 合计减 15%（即 cdp 被改到 85）
+# 下面的数值由主动被动触发效果引用
+  atk: 10              # 攻击数值：可被 { ref: self.atk } 引用、可被 buff；**不内置普攻**，伤害须显式声明
+# shd: 10              # 护盾数值
+# hel: 10              # 治疗数值
+# bur: 1               # 燃烧数值
+# poi: 1               # 剧毒数值
+# reg: 1               # 再生数值
+# has: 1.00            # 加速时长（单位：s）
+# sol: 1.00            # 减速时长（单位：s）
+# fre: 1.00            # 冰冻时长（单位：s）
+# chg: 1.00            # 充能时长（单位：s）
+
+# ---------- 经济（均选填；缺省由价值定义文件 card_values.yml 获取，规则 §16） ----------
+
+# buy_prize: 2        # 买入价值
+# prize: 1            # 当前售价；引擎/客户端需维护卡牌当前价值
+
+# ---------- 多重触发（选填） ----------
+
+# multicast: 1          # 行动条充满后主动行动的次数，默认 1
+                       # >1 时必须标注：卡面 *N、悬浮窗标明"多重触发 N"
+
+# ---------- 标签（选填） ----------
+
+tags: []                # 类型标签，供"每有一个X"类效果计数
+hidden_tags: []         # 隐藏词条：不显示在卡面，供后续全过程模拟用
+
+# ---------- 能力列表 ----------
+
+abilities:
+
+  # ===== 主动效果（kind: active） =====
+  # 挂靠在主动行动上的效果：本卡行动条充满时，按书写顺序依次触发；
+  # 主动效果没有 trigger / cooldown —— "冷却"就是行动条本身（充满周期 = cooldown
+  # 顶层字段 ÷ stats.speed 倍率，再受加速/减速/冰冻影响）
+  #
+  # 【书写规则】abilities 内不要写硬数值：数值型参数（amount / seconds / duration 等）
+  # 一律引用上方 stats 内定义的字段（可写 { ref: self.atk } 或简写 self.atk），保证战斗内
+  # 可被 buff 修改；字面量只允许出现在表达式内部（系数 / 阈值，如 mul: [self.atk, 0.2]）
+  # 以及结构性参数（everyN / stackLimit / priority / condition 阈值）
+  - id: 1                    # 唯一确定id，不可重复
+    kind: active
+    # everyN: 3              # 选填：仅本卡第 3、6、9… 次主动行动时结算（默认每次充满都结算）
+    actions:
+      - do: dealDamage
+        target: { pick: randomEnemyCard }
+        amount: self.atk 
+
+  # ===== 被动（kind: passive） =====
+  # 挂在卡牌上的触发器：时机词 + 可选条件 + 动作（时机词见《时机表.md》）
+  # priority 数值大者优先（默认 5，最大10，最少1）；优先级相同：加载早者优先（战斗开始先本方后敌方、从左到右）
+  - id: 2
+    kind: passive
+    priority: 10
+    trigger: { event: onPlayerDamaged }   # 玩家受伤时（敌我双方均广播）
+    condition:                            # 仅"敌方玩家受伤 且 己方血量 < 30%"时触发
+      all:
+        - { cmp: eq, left: { var: player }, right: { ref: enemyPlayer } }
+        - { cmp: lt, left: { ref: ownPlayer.hpPct }, right: 0.3 }
+    actions:
+      - do: gainStat          # 属性增减（以 buff 形式挂在目标上）
+        stat: atk
+        amount: { mul: [self.atk, 0.2] }   # 表达式：四则 add/sub/mul/div、ref 引用、count 计数
+        stackLimit: 5         # 层数上限：达上限后替换同 stat、同 source 最早一层并刷新时长
+        target: self
+# ---------- 附魔（选填） ----------
+
+# 附魔可自定义且需逐条定义，写在本卡设定文件中（规则 §18.7）
+# 一张卡同时至多一个附魔，新附魔覆盖旧的（v0.8 决议，无槽位 / 无叠加）
+# enchant:
+#   - do: gainStat
+#     stat: atk
+#     amount: self.atk
+#     target: self
+# 品质继承（规则 §13 v0.9）：高品质卡继承低品质卡的基础数值，有变化的部分按品阶分段覆盖。
+# 【书写规则】
+#   1. 从本卡最低品阶（rarity 字段）的下一阶起、到最高品阶（默认 diamond）为止，每一阶一段、必须齐全；
+#   2. stats 为增量（delta）覆盖：该品阶基础值 = 最低品阶基础值 + 沿途各段增量之和
+#      （本样例 atk 走 10 → 20 → 40 → 80，即 +10 / +20 / +40）。增量只改卡面基础值，
+#      不触碰局外养成等运行时附加数值（升级永不清空养成）；
+#   3. abilities 按 id 合并覆盖：覆盖条目只写 id + condition + actions（后两者需全写，
+#      kind 沿用被覆盖条目）；未列出的 abilities 条目原样继承；
+#   4. 其余字段（cooldown / enchant / tags 等）不可覆盖，一律继承。
+inherit_override:
+  - rarity: silver        # 白银段：基础 atk 10 + 10 = 20；被动 id 2 阈值 30% → 40%
+    stats: { atk: 10 }    # 增量 +10
+    abilities:
+      - id: 2             # 按 abilities 的 id 定位被覆盖条目；condition / actions 需全写
+        condition:
+          all:
+            - { cmp: eq, left: { var: player }, right: { ref: enemyPlayer } }
+            - { cmp: lt, left: { ref: ownPlayer.hpPct }, right: 0.4 }
+        actions:
+          - do: gainStat
+            stat: atk
+            amount: { mul: [self.atk, 0.2] }   # 表达式：四则 add/sub/mul/div、ref 引用、count 计数
+            stackLimit: 5         # 层数上限：达上限后替换同 stat、同 source 最早一层并刷新时长
+            target: self
+  - rarity: gold          # 黄金段：基础 atk 20 + 20 = 40；被动 id 2 阈值 → 50%
+    stats: { atk: 20 }    # 增量 +20
+    abilities:
+      - id: 2
+        condition:
+          all:
+            - { cmp: eq, left: { var: player }, right: { ref: enemyPlayer } }
+            - { cmp: lt, left: { ref: ownPlayer.hpPct }, right: 0.5 }
+        actions:
+          - do: gainStat
+            stat: atk
+            amount: { mul: [self.atk, 0.2] }
+            stackLimit: 5
+            target: self
+  - rarity: diamond       # 钻石段：基础 atk 40 + 40 = 80；被动 id 2 阈值 → 60%
+    stats: { atk: 40 }    # 增量 +40
+    abilities:
+      - id: 2
+        condition:
+          all:
+            - { cmp: eq, left: { var: player }, right: { ref: enemyPlayer } }
+            - { cmp: lt, left: { ref: ownPlayer.hpPct }, right: 0.6 }
+        actions:
+          - do: gainStat
+            stat: atk
+            amount: { mul: [self.atk, 0.2] }
+            stackLimit: 5
+            target: self
+
+
+# ============================================================
+# 动作原语速查（封闭词表，写错即报错并给建议；完整定义见规则说明书 §9）
+#
+# —— 对玩家 ——
+#   dealDamage    造成伤害   { target, amount }   先扣护盾后血量（灼烧 1 盾抵 2 伤，剧毒无视护盾）；
+#                                               触发 onPlayerDamaged；作用于卡牌时仅广播 onCardDamaged（无实际损失）
+#   healPlayer    治疗       { target, amount }   不超 maxHp；X 治疗清除 0.05X 层灼烧与 0.05X 层剧毒
+#   shield        护盾       { target, amount, duration? }   单一护盾池、总额累加；抵御灼烧（2伤/1盾），不防剧毒
+#   gainStat      属性增减   { stat, amount, duration?, stackLimit?, target }
+#                 目标可为玩家：stat 用 burn / poison / regen 即施加持续效果层数（灼烧会随跳伤衰减）
+#
+# —— 对卡牌 ——
+#   gainStat      属性增减   { stat, amount, duration?, stackLimit?, target }   stat: atk / speed 等
+#   applyStatus   卡牌状态   { target, status, duration }   status: haste 加速(行动条×2, 等效间隔≥1s)
+#                                                             / slow 减速(÷2) / freeze 冰冻(速度=0, 不行动)；
+#                                                             三者独立计时、不互相覆盖（冰冻期间加减速无效但时长照减，18.8）
+#   charge        充能       { target, seconds }   行动条直接推进 X 秒；单次推进最多触发一次主动行动
+#   destroy       失效       { target }   失效≠离场：仍占位、不行动、被动停用；触发 onCardDestroyed
+#   repair        修复       { target }   重置被 destroy 的卡牌；触发 onCardRepaired
+#
+# —— 持续效果（灼烧 burn / 剧毒 poison / 再生 regen）——
+#   非卡面动作原语，由引擎内置周期触发器实现（规则 §18）：灼烧每 0.5s 跳伤并 -20% 层数，
+#   剧毒每 1s 跳伤（无视护盾、不衰减），再生每 1s 回血（不衰减）。
+#   卡面通过 gainStat（stat: burn/poison/regen，target 为玩家）施加层数。
+#
+# —— 选择器（target / count；封闭词表，规则 §10）——
+#   self / ownPlayer / enemyPlayer
+#   allOwnCards / allEnemyCards
+#   randomEnemyCard / randomOwnCard
+#   adjacentToSelf / adjacentLeftSelf / adjacentRightSelf
+#
+# —— 条件 condition ——
+#   { cmp: lt|lte|gt|gte|eq|neq, left: <Expr>, right: <Expr> }
+#   { not: <Condition> } / { any: [...] } / { all: [...] }
+#
+# —— 表达式 Expr ——
+#   数字字面量 45
+#   { ref: self.atk } / { ref: self.speed } / { ref: ownPlayer.hp }   # 封闭引用表，见规则 §8.3
+#   { var: amount }                                                   # 事件参数，见《参数表设计.md》
+#   { count: <Selector> }
+#   { add: [...] } / { sub: [...] } / { mul: [...] } / { div: [a, b] }
+# ============================================================
