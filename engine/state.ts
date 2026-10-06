@@ -241,7 +241,7 @@ function createPlayer(
  *
  * 注意：**不做"必须写主动效果"的校验**。卡的主动/被动属性只由 `cooldown` 决定
  * （规则 §5）：`cooldown !== -1` 就是主动卡，没有 `kind: active` 也照常走行动条、
- * 照常"使用"并广播 `afterAction`（只是不产生效果）；`cooldown: -1` 就是纯被动卡，
+ * 照常"使用"并广播 `after_action`（只是不产生效果）；`cooldown: -1` 就是纯被动卡，
  * 卡面上写了 `kind: active` 也一律无效。故这里没有可拒绝的输入。
  */
 export function createBattleState(options: BattleOptions): BattleState {

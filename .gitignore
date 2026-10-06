@@ -11,6 +11,10 @@ coverage/
 # 探针 / 诊断输出（如 simulator/__probe_trace__.out.txt）
 *.out.txt
 
+# 内部设计文档目录：**暂时不入库**（RW 指示，v0.28）——只保留在本地
+#   将来要恢复入库：删掉下面这一行；若 docs/ 已被提交过历史版本，另用 git rm -r --cached docs
+docs/
+
 # 编辑器 / 系统
 .DS_Store
 Thumbs.db
@@ -20,3 +24,7 @@ Thumbs.db
 
 # 注意：packs/ skills/ drafts/ decks/ rarities.yml 是**工作区数据，必须入库**（框架 §3）
 #      不要把它们当作构建产物忽略掉。
+#      对外教程与 YAML 模板放 tutorial/（**入库**）；内部设计文档在 docs/（**暂不入库**）。
+
+AGENT.md
+#AGENT约束不放入git

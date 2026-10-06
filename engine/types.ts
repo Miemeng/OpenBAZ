@@ -27,9 +27,16 @@ export type DotKind = 'burn' | 'poison' | 'regen'
 // 数值与表达式（规则 §8）
 // ————————————————————————————————————————————————————————————
 
-/** 表达式：字面量 / 引用 / 事件参数 / 计数 / 四则（结构在 P1 阶段细化，先定形状） */
+/**
+ * 表达式：字面量 / 引用 / 事件参数 / 计数 / 四则（结构在 P1 阶段细化，先定形状）。
+ *
+ * v0.11 起允许**字符串字面量**（a-lite 引用型比较）：只用于 `cmp` 的 `eq` / `neq`，
+ * 典型是阵营值（`right: own` / `right: enemy`）与字符串型事件参数（`event_name` / `winner`）。
+ * 数值上下文里出现字符串字面量会直接报错。
+ */
 export type Expr =
   | number
+  | string
   | { readonly ref: string }
   | { readonly var: string }
   | { readonly count: string }
@@ -51,11 +58,11 @@ export type Condition =
 
 /** 动作原语名（规则 §9 的封闭词表：8 个原语，enchant 已登记但实现搁置） */
 export type PrimitiveName =
-  | 'dealDamage'
-  | 'healPlayer'
-  | 'gainStat'
+  | 'deal_damage'
+  | 'heal_player'
+  | 'gain_stat'
   | 'shield'
-  | 'applyStatus'
+  | 'apply_status'
   | 'charge'
   | 'destroy'
   | 'repair'
@@ -63,14 +70,14 @@ export type PrimitiveName =
 /** 一条动作（规则 §9；字段按原语不同而不同，P1 阶段收紧为可辨识联合） */
 export interface ActionSpec {
   readonly do: PrimitiveName
-  /** 选择器（规则 §10）：self / ownPlayer / enemyPlayer / allEnemyCards / randomOwnCard … */
+  /** 选择器（规则 §10）：self / own_player / enemy_player / all_enemy_cards / random_own_card … */
   readonly target?: string
   readonly stat?: string
   readonly status?: CardStatusKind
   readonly amount?: Expr
   readonly seconds?: Expr
   readonly duration?: Expr
-  readonly stackLimit?: number
+  readonly stack_limit?: number
 }
 
 /** 一条能力（规则 §6.1：触发器 = 时机词 + 参数 + 条件 + 动作列表） */
@@ -85,7 +92,7 @@ export interface Ability {
   readonly condition?: Condition
   readonly actions: readonly ActionSpec[]
   /** 仅本卡第 N 的整数倍次主动行动时结算（缺省每次） */
-  readonly everyN?: number
+  readonly every_n?: number
 }
 
 /** 卡牌定义（字段全集见《YAML数据格式规范.md》与《卡牌YAML模板.yml》 v0.3.4） */
@@ -114,7 +121,7 @@ export interface Card {
   /** 行动条充满后主动行动的次数（缺省 1） */
   readonly multicast?: number
   readonly tags?: readonly string[]
-  readonly hiddenTags?: readonly string[]
+  readonly hidden_tags?: readonly string[]
   readonly abilities?: readonly Ability[]
   /** 附魔：常驻效果组，一张卡至多一个（规则 §18.7） */
   readonly enchant?: readonly ActionSpec[]
@@ -133,7 +140,7 @@ export interface Skill {
    *
    * 为什么必填（P0.6 修正）：技能原先没有任何事件匹配判断，而收集逻辑是按
    * "本帧命中的每个事件词收集一次"驱动的，于是**同一触发帧命中两个事件词时，
-   * 每侧技能会在这一帧结算两次**；叠加灼烧 `onPlayerDamaged` 自激后，开局技能
+   * 每侧技能会在这一帧结算两次**；叠加灼烧 `on_player_damaged` 自激后，开局技能
    * 变成每帧反复结算（实测 `--seed 42`：三个技能各 541 次、护盾膨胀到 10 万），
    * 直接导致双方锁血打满 180s。绑上 trigger 后技能才真正只在自己该响的时机响。
    */
@@ -148,7 +155,7 @@ export interface Skill {
 // 运行时状态
 // ————————————————————————————————————————————————————————————
 
-/** 一条数值修正（buff / debuff）。层数、时长、来源都要记，供 stackLimit 与刷新逻辑使用 */
+/** 一条数值修正（buff / debuff）。层数、时长、来源都要记，供 stack_limit 与刷新逻辑使用 */
 export interface StatModifier {
   readonly stat: string
   /** 可累加（同 stat、同 source 再次施加时叠加） */
@@ -156,7 +163,7 @@ export interface StatModifier {
   readonly source: string
   /** 剩余时长，单位 **cs（厘秒 = 全局帧，0.01s）**，整数；undefined = 常驻（会被刷新） */
   remainingCs?: number
-  readonly stackLimit?: number
+  readonly stack_limit?: number
 }
 
 /** 卡牌身上的状态（加速 / 减速 / 冰冻：独立计时、不互相覆盖） */
@@ -184,7 +191,7 @@ export interface BoardCard {
    * 每个全局帧 +1（规则 §14："`gauge += 1`/全局帧"），满条则在触发帧边界被消费并结转余量。
    */
   gaugeCs: number
-  /** 已执行的主动行动次数（`everyN` 与 charge 特例用它计数） */
+  /** 已执行的主动行动次数（`every_n` 与 charge 特例用它计数） */
   actionCount: number
   /** destroy 原语：失效（仍占位、不行动、被动停用） */
   destroyed: boolean

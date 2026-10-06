@@ -8,7 +8,7 @@
 //
 // 因此"位置"是卡牌的**一等字段**：不仅用于渲染（哪一格放哪张卡），
 // 也用于行动顺序（同优先级下按加载顺序，而加载顺序 = 先本方后敌方、各自从左到右）
-// 与将来的相邻类选择器（adjacentToSelf / adjacentLeftSelf / adjacentRightSelf）。
+// 与将来的相邻类选择器（adjacent_to_self / adjacent_left_self / adjacent_right_self）。
 import type { BoardCard, Card, CardSize, PlayerId } from './types.ts'
 
 /** 每行格子数（规则 §2：双方各一行 10 格） */

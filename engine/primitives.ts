@@ -1,10 +1,10 @@
 // 动作原语（规则 §9）——封闭词表，8 个原语
 //
-//   dealDamage    造成伤害   { target, amount }
-//   healPlayer    治疗       { target, amount }
+//   deal_damage    造成伤害   { target, amount }
+//   heal_player    治疗       { target, amount }
 //   shield        护盾       { target, amount, duration? }
-//   gainStat      属性增减   { stat, amount, duration?, stackLimit?, target }
-//   applyStatus   卡牌状态   { target, status, duration }
+//   gain_stat      属性增减   { stat, amount, duration?, stack_limit?, target }
+//   apply_status   卡牌状态   { target, status, duration }
 //   charge        充能       { target, seconds }
 //   destroy       失效       { target }
 //   repair        修复       { target }
@@ -13,7 +13,7 @@
 // - 普通伤害 1 点护盾抵御 1 点；
 // - 灼烧伤害每点护盾抵御 2 点（即 1 盾抵 2 伤，见 damageOverTime 的 burn 分支）；
 // - 剧毒伤害无视护盾；
-// - healPlayer：X 治疗清除 0.05X 层灼烧与 0.05X 层剧毒。
+// - heal_player：X 治疗清除 0.05X 层灼烧与 0.05X 层剧毒。
 //
 // 本文件只做"对状态施加影响"，**不判定胜负**——胜负在 tick.ts 的 checkOutcome（见该文件注释）。
 import {
@@ -40,7 +40,7 @@ import type {
 import type { EvalContext } from './expr.ts'
 import { evaluateExpr } from './expr.ts'
 
-/** 玩家侧持续效果通道（gainStat 的 stat 命中这三个词时改走这里，规则 §9 gainStat 说明） */
+/** 玩家侧持续效果通道（gain_stat 的 stat 命中这三个词时改走这里，规则 §9 gain_stat 说明） */
 const DOT_STATS: ReadonlySet<string> = new Set<DotKind>(['burn', 'poison', 'regen'])
 
 function isDotKind(stat: string): stat is DotKind {
@@ -103,7 +103,7 @@ export function applyDot(
   })
 }
 
-/** 治疗：不超 maxHp；并按 0.05 比例清除灼烧与剧毒层数（规则 §9 healPlayer） */
+/** 治疗：不超 maxHp；并按 0.05 比例清除灼烧与剧毒层数（规则 §9 heal_player） */
 export function healPlayerState(player: PlayerState, amount: number): number {
   const healed = Math.min(amount, Math.max(player.maxHp - player.hp, 0))
   player.hp += healed
@@ -156,7 +156,7 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
   const durationCs = spec.duration === undefined ? undefined : secondsToCs(evaluateExpr(spec.duration, context))
 
   switch (spec.do) {
-    case 'dealDamage': {
+    case 'deal_damage': {
       for (const side of selection.players) {
         const target = state.players[side]
         const { hpDelta, absorbed } = dealDamageToPlayer(target, amount, 1)
@@ -169,7 +169,7 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
           shieldAfter: target.shield,
         })
       }
-      // 作用于卡牌时仅广播 onCardDamaged，无实际损失（规则 §9 dealDamage 说明）
+      // 作用于卡牌时仅广播 on_card_damaged，无实际损失（规则 §9 deal_damage 说明）
       for (const boardCard of selection.cards) {
         effects.push({
           kind: 'damage',
@@ -184,7 +184,7 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
       break
     }
 
-    case 'healPlayer': {
+    case 'heal_player': {
       for (const side of selection.players) {
         const target = state.players[side]
         const healed = healPlayerState(target, amount)
@@ -216,9 +216,9 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
       break
     }
 
-    case 'gainStat': {
+    case 'gain_stat': {
       const stat = spec.stat
-      if (stat === undefined) throw new Error('gainStat 必须指定 stat')
+      if (stat === undefined) throw new Error('gain_stat 必须指定 stat')
       for (const side of selection.players) {
         const target = state.players[side]
         if (isDotKind(stat)) {
@@ -258,7 +258,7 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
             amount,
             source,
             ...(durationCs === undefined ? {} : { remainingCs: durationCs }),
-            ...(spec.stackLimit === undefined ? {} : { stackLimit: spec.stackLimit }),
+            ...(spec.stack_limit === undefined ? {} : { stack_limit: spec.stack_limit }),
           })
         }
         effects.push({
@@ -275,9 +275,9 @@ export function applyAction(state: BattleState, spec: ActionSpec, context: EvalC
       break
     }
 
-    case 'applyStatus': {
+    case 'apply_status': {
       const status = spec.status
-      if (status === undefined) throw new Error('applyStatus 必须指定 status')
+      if (status === undefined) throw new Error('apply_status 必须指定 status')
       // 状态时长口径与 applyDot 一致：`duration` 缺省时退回 `seconds`（两者都按秒书写，
       // 已在函数开头统一换算成 durationCs / seconds）。这里 durationCs 已是 cs，
       // 而 seconds 仍是秒，故缺省路径单独换算，避免把 cs 当成秒再乘 100。

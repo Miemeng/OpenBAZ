@@ -1,7 +1,7 @@
 // 选择器（规则 §10）——封闭词表，写错即抛错
 //
-// 词表：self / ownPlayer / enemyPlayer / allOwnCards / allEnemyCards /
-//       randomEnemyCard / randomOwnCard / adjacentToSelf / adjacentLeftSelf / adjacentRightSelf
+// 词表：self / own_player / enemy_player / all_own_cards / all_enemy_cards /
+//       random_enemy_card / random_own_card / adjacent_to_self / adjacent_left_self / adjacent_right_self
 import { activeCards, slotsOfBoardCard } from './board.ts'
 import type { BattleState, BoardCard, PlayerId } from './types.ts'
 import type { Rng } from './rng.ts'
@@ -42,7 +42,7 @@ function ownCards(context: SelectContext, side: PlayerId): BoardCard[] {
 /** 与来源卡"相邻"的卡：同侧、slot 区间相隔正好 1 格（规则 §1：相邻 = 同侧格子索引相邻） */
 function adjacentCards(context: SelectContext, direction: 'both' | 'left' | 'right'): BoardCard[] {
   const self = context.self
-  if (self === null) throw new Error('adjacentToSelf 类选择器只能用于卡牌动作（无来源卡）')
+  if (self === null) throw new Error('adjacent_to_self 类选择器只能用于卡牌动作（无来源卡）')
   const slots = context.state.players[self.owner].board
   const ownRange = slotSpan(self)
   return activeCards(slots).filter((other) => {
@@ -77,27 +77,27 @@ export function selectTargets(selector: string, context: SelectContext): Selecti
       if (context.self === null) throw new Error('选择器 self 只能用于卡牌动作（无来源卡）')
       return { cards: [context.self], players: [] }
     }
-    case 'ownPlayer':
+    case 'own_player':
       return { ...EMPTY, players: [context.side] }
-    case 'enemyPlayer':
+    case 'enemy_player':
       return { ...EMPTY, players: [enemyOf(context.side)] }
-    case 'allOwnCards':
+    case 'all_own_cards':
       return { ...EMPTY, cards: ownCards(context, context.side) }
-    case 'allEnemyCards':
+    case 'all_enemy_cards':
       return { ...EMPTY, cards: ownCards(context, enemyOf(context.side)) }
-    case 'randomOwnCard': {
+    case 'random_own_card': {
       const picked = pickRandom(context, ownCards(context, context.side))
       return { ...EMPTY, cards: picked === undefined ? [] : [picked] }
     }
-    case 'randomEnemyCard': {
+    case 'random_enemy_card': {
       const picked = pickRandom(context, ownCards(context, enemyOf(context.side)))
       return { ...EMPTY, cards: picked === undefined ? [] : [picked] }
     }
-    case 'adjacentToSelf':
+    case 'adjacent_to_self':
       return { ...EMPTY, cards: adjacentCards(context, 'both') }
-    case 'adjacentLeftSelf':
+    case 'adjacent_left_self':
       return { ...EMPTY, cards: adjacentCards(context, 'left') }
-    case 'adjacentRightSelf':
+    case 'adjacent_right_self':
       return { ...EMPTY, cards: adjacentCards(context, 'right') }
     default:
       throw new Error(`未知选择器：${selector}（封闭词表见规则 §10）`)

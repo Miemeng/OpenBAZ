@@ -1,0 +1,2 @@
+# 角色定义目录：heroes/<hero_id>/<hero_id>.yml（+ 同层同 id 头像、images/ 立绘）
+# 格式见 docs/YAML数据格式规范.md §11；模板见 docs/YAML模板/角色YAML模板.yml

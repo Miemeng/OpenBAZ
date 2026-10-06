@@ -80,6 +80,15 @@ export default [
     },
   },
 
+  // client/：Vite 标准的环境声明文件用三斜线引用（vite/client），这是官方推荐写法、
+  // 不能用 import 替代，故只对 .d.ts 关掉这条规则。
+  {
+    files: ['client/**/*.d.ts'],
+    rules: {
+      '@typescript-eslint/triple-slash-reference': 'off',
+    },
+  },
+
   // engine/：零依赖 + 零宿主 API（黄金法则 2）
   {
     files: ['engine/**/*.ts'],

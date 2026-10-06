@@ -131,7 +131,8 @@ function main(): void {
     // 摆盘图：一行 10 格，卡牌左端所在格与占格数都在图里
     for (const side of [1, 2] as const) {
       const player = state.players[side]
-      out(`${player.name}　血量 ${String(player.hp)}　护盾 ${String(player.shield)}`)
+      // 分隔用全角空格一律写成 \u3000 转义：模板字面量默认不被 no-irregular-whitespace 跳过，直接写字面量会 lint 报错
+      out(`${player.name}\u3000血量 ${String(player.hp)}\u3000护盾 ${String(player.shield)}`)
       for (const line of renderRow(player.board, '')) out(line)
       out('')
     }
@@ -152,7 +153,7 @@ function main(): void {
     `=== 用时：触发帧=${String(state.triggerFrame)} 全局帧=${String(state.timeCs)}（${csToSeconds(state.timeCs).toFixed(2)}s）===`,
   )
   out(
-    `=== 终局血量：${state.players[1].name} ${String(state.players[1].hp)}　${state.players[2].name} ${String(state.players[2].hp)} ===`,
+    `=== 终局血量：${state.players[1].name} ${String(state.players[1].hp)}\u3000${state.players[2].name} ${String(state.players[2].hp)} ===`,
   )
 
   flushLog(options.logPath, fileLines)

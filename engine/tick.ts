@@ -22,7 +22,7 @@
 //   故循环体是"每 1cs 一次、共 MAX_TIME_CS = 18000 次"。
 //
 // 事件（规则 §4 的"广播"）：本实现用一个**本触发帧内有效的事件集合 + 待结算队列** 表达。
-//   - 只有"本触发帧真的发生过"的事件才会触发对应触发器（如 onPlayerDamaged）；
+//   - 只有"本触发帧真的发生过"的事件才会触发对应触发器（如 on_player_damaged）；
 //     这一点必须显式追踪，否则像"敌方受伤时失效敌方一张卡"这类被动会每个触发帧都触发。
 //   - 触发器入队后按 §6.2 排序结算；结算过程中产生的新事件**只记账、并入下一个触发帧**
 //     （规则 §15 末尾："结算过程中新产生的事件并入下一个触发帧"），本帧不再二次收集。
@@ -249,7 +249,7 @@ function advanceDotsAndCheck(
   emit: (entry: ActionLog) => void,
   log: ActionLog,
 ): boolean {
-  queue.broadcast('onPlayerDamaged')
+  queue.broadcast('on_player_damaged')
   emit(log)
   if (checkOutcome(state)) {
     queue.clear()
@@ -290,11 +290,11 @@ function applyAll(
     effects,
   }
 
-  // 伤害事件：本动作是否真的造成了伤害，决定 onPlayerDamaged 是否广播
+  // 伤害事件：本动作是否真的造成了伤害，决定 on_player_damaged 是否广播
   const dealtDamage = effects.some((effect) => effect.kind === 'damage' && effect.amount > 0)
   if (dealtDamage) {
     // 伤害事件广播：先记账再 emit（emit 会顺带判定胜负）
-    queue.broadcast('onPlayerDamaged')
+    queue.broadcast('on_player_damaged')
   }
   emit(log)
   if (checkOutcome(state)) queue.clear()
@@ -340,7 +340,7 @@ function stepOneGlobalFrame(state: BattleState): { side: PlayerId; effect: Actio
  *
  * 主循环（规则 §14 / §15）：
  * ```
- * 初始化：摆盘 → 广播 battleStart → 按优先级结算触发栈（技能与 battleStart 被动）
+ * 初始化：摆盘 → 广播 battle_start → 按优先级结算触发栈（技能与 battle_start 被动）
  * 循环（全局帧 timeCs += 1cs，直到 timeCs >= MAX_TIME_CS = 18000）：
  *   0a 持续效果周期 + 状态计时与到期 + 行动条推进（各推进 1cs，均按整数 cs）
  *   0b 因果点胜负判定（持续效果跳伤后立刻判）
@@ -365,10 +365,10 @@ export function runBattle(options: BattleOptions): BattleResult {
     if (includeText) lines.push(...formatAction(state, entry))
   }
 
-  // —— 初始化阶段：广播 battleStart → 按优先级结算触发栈（技能与 battleStart 被动）——
-  // 初始化结束时必须清掉事件集合，否则 battleStart 会被当成"本触发帧发生过的事件"再收集一次。
-  queue.broadcast('battleStart')
-  collectPassives(state, queue, 'battleStart')
+  // —— 初始化阶段：广播 battle_start → 按优先级结算触发栈（技能与 battle_start 被动）——
+  // 初始化结束时必须清掉事件集合，否则 battle_start 会被当成"本触发帧发生过的事件"再收集一次。
+  queue.broadcast('battle_start')
+  collectPassives(state, queue, 'battle_start')
   // 传 hasFired 而不是事件名：collectSkills 的契约就是"按已广播事件判定"，
   // 与主循环保持同一种调用形式（`hasFired` 是队列自己的成员，这里不会失效）。
   collectSkills(state, queue, event => queue.hasFired(event))
@@ -423,12 +423,12 @@ export function runBattle(options: BattleOptions): BattleResult {
       if (state.finished) break
       ordinalRef.value += 1
       applyAll(state, queue, emit, pending, ordinalRef.value)
-      // 本卡主动行动完成 → 广播 `afterAction`（《时机表.md》B 类）。
+      // 本卡主动行动完成 → 广播 `after_action`（《时机表.md》B 类）。
       // **无条件广播**：卡上没有 `kind: active` 效果时，它依然"使用"了这张卡，
       // 依然应当能驱动其他物品的被动（规则 §5：主动/被动只由 cooldown 决定）。
       // 广播只能记账：EventQueue.broadcast 用 Set 去重，故同一触发帧内多张卡行动
       // 也只算"发生过一次"，对应 §6.3"同一触发器每 tick 至多结算一次"。
-      if (!state.finished) queue.broadcast('afterAction')
+      if (!state.finished) queue.broadcast('after_action')
     }
     // 行动条消费放在结算之后：即使行动过程中卡被 destroy / 冻结，也要把这一帧的满条消费掉，
     // 否则它会在下一个触发帧"再次满条"从而重复行动（残量按 §14 结转，由 consumeActionBar 保证）
@@ -469,20 +469,20 @@ export function runBattle(options: BattleOptions): BattleResult {
 /**
  * 引擎当前会广播的事件词（《时机表.md》的子集，按 P0.6 实现范围）。
  *
- * - `battleStart`：开局，在 `runBattle` 初始化阶段广播一次（不在触发帧循环里）。
- * - `afterAction`：任意卡牌主动行动**完成之后**（B 类）。由主循环步骤 1 在每张卡的
+ * - `battle_start`：开局，在 `runBattle` 初始化阶段广播一次（不在触发帧循环里）。
+ * - `after_action`：任意卡牌主动行动**完成之后**（B 类）。由主循环步骤 1 在每张卡的
  *   `applyAll` 之后无条件广播，**不看该卡有没有 `kind: active` 效果**。
- * - `onPlayerDamaged`：玩家受到伤害后（`applyAll` 只在真有 `damage > 0` 时广播）。
+ * - `on_player_damaged`：玩家受到伤害后（`applyAll` 只在真有 `damage > 0` 时广播）。
  *
  * 数组顺序不影响结算顺序：本轮收集到的触发器全部并入同一个优先队列，
  * 由 `comparePending`（§6.2：priority 降序 → loadOrder 升序 → tieBreak 升序）统一排序。
  *
  * **尚未实现的时机词**：《时机表.md》B–E 类共 18 词均为 ✅，这里只落地了 3 个。
- * 其中 `beforeAction`（主动行动**之前**，框架 §5 伪代码 1a）与 `afterAction` 对称、
- * 缺它就是"用了卡但没广播"；其余（`onCardDamaged` / `onShieldGained` /
- * `onBurnTick` / `onCardDestroyed` …）都需要各自的广播点，属 P0.6 之后的范围。
+ * 其中 `before_action`（主动行动**之前**，框架 §5 伪代码 1a）与 `after_action` 对称、
+ * 缺它就是"用了卡但没广播"；其余（`on_card_damaged` / `on_shield_gained` /
+ * `on_burn_tick` / `on_card_destroyed` …）都需要各自的广播点，属 P0.6 之后的范围。
  */
-const EVENT_WORDS = ['battleStart', 'afterAction', 'onPlayerDamaged'] as const
+const EVENT_WORDS = ['battle_start', 'after_action', 'on_player_damaged'] as const
 
 /**
  * 收集**卡牌被动**并入队：`trigger.event` 精确匹配 + `condition` 为真；
@@ -561,7 +561,7 @@ function collectSkills(state: BattleState, queue: EventQueue, hasFired: (event: 
  *
  * 卡的主动/被动属性**只由 `cooldown` 决定**，与有没有写 `kind: active` 无关：
  * - `cooldown !== -1` = 主动卡。行动条充满就是"使用该卡"：即使一条 `kind: active` 都没写
- *   （或被 `everyN` 全部过滤掉），这次主动行动也照常发生、照常广播 `afterAction`，
+ *   （或被 `every_n` 全部过滤掉），这次主动行动也照常发生、照常广播 `after_action`，
  *   只是不产生任何效果——`actions` 为空是合法状态，不是错误。
  * - `cooldown: -1` = 纯被动卡。卡面上**写了 `kind: active` 也完全无效**，且不受充能影响：
  *   唯一闸门是 `actionPeriodCs` 对它返回 `Infinity`，主循环据此跳过（既不充能也不满条），
@@ -569,16 +569,16 @@ function collectSkills(state: BattleState, queue: EventQueue, hasFired: (event: 
  *
  * 卡牌**没有内置普攻 / 基础行动**——`stats.atk` 只是"可被引用、可被 buff 的数值"，
  * 引擎不会自动把它变成伤害。想把 `atk` 打出去，卡面必须自己写一条
- * `{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }`。
+ * `{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }`。
  */
 function buildActiveAction(state: BattleState, boardCard: BoardCard): PendingAction {
   const actions: ActionLogSpec[] = []
   const abilities = (boardCard.card.abilities ?? []).filter((ability) => ability.kind === 'active')
   const actionIndex = boardCard.actionCount + 1
 
-  // 挂靠效果：声明 everyN 者仅在本卡第 N 的整数倍次主动行动时结算
+  // 挂靠效果：声明 every_n 者仅在本卡第 N 的整数倍次主动行动时结算
   for (const ability of abilities) {
-    if (ability.everyN !== undefined && actionIndex % ability.everyN !== 0) continue
+    if (ability.every_n !== undefined && actionIndex % ability.every_n !== 0) continue
     for (const spec of ability.actions) {
       actions.push({ spec, self: boardCard, side: boardCard.owner })
     }

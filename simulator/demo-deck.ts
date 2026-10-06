@@ -10,8 +10,8 @@
 //
 // 这 5 张卡同时是**机制覆盖样例**：用它跑一局，8 个动作原语与 3 类持续效果全部会出现在日志里，
 // 便于一次肉眼验证整条链路：
-//   dealDamage（主动/被动）  healPlayer（field_medic）  shield（iron_guard）  gainStat（ember_priest 的 burn/poison）
-//   applyStatus（ash_runner 的 haste）  charge（bastion_smith）  destroy（bastion_smith 被动）+ repair（field_medic 被动）
+//   deal_damage（主动/被动）  heal_player（field_medic）  shield（iron_guard）  gain_stat（ember_priest 的 burn/poison）
+//   apply_status（ash_runner 的 haste）  charge（bastion_smith）  destroy（bastion_smith 被动）+ repair（field_medic 被动）
 // 位置：每张卡都写明 `slot`（左端所在格，1–10），占格数由 size 推导（小 1 / 中 2 / 大 3）。
 import type { Card, Skill } from '../engine/types.ts'
 import type { Placement } from '../engine/board.ts'
@@ -27,12 +27,12 @@ const CINDER_WOLF: Card = {
   stats: { atk: 40 }, // 【平衡待定】
   tags: [],
   // 规则 §1：卡牌**没有内置普攻**，`stats.atk` 只是一个可被 buff 的数值，
-  // 想把它打成伤害必须由卡面显式写一条 dealDamage（此前靠引擎自动拼接，已移除）。
+  // 想把它打成伤害必须由卡面显式写一条 deal_damage（此前靠引擎自动拼接，已移除）。
   abilities: [
     {
       id: 1,
       kind: 'active',
-      actions: [{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }],
+      actions: [{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }],
     },
   ],
 }
@@ -51,14 +51,14 @@ const IRON_GUARD: Card = {
     {
       id: 1,
       kind: 'active',
-      actions: [{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }],
+      actions: [{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }],
     },
     {
       // 与 id 1 共用同一行动条与同一 actionCount：第 3、6、9… 次行动额外套盾
       id: 2,
       kind: 'active',
-      everyN: 3,
-      actions: [{ do: 'shield', target: 'ownPlayer', amount: { ref: 'self.shd' } }],
+      every_n: 3,
+      actions: [{ do: 'shield', target: 'own_player', amount: { ref: 'self.shd' } }],
     },
   ],
 }
@@ -71,18 +71,18 @@ const ASH_RUNNER: Card = {
   cooldown: 150, // 【平衡待定】1.50s → 150cs
   rarity: 'bronze',
   description: '示例卡：造成伤害 + 给自己加速',
-  stats: { atk: 6, has: 3 }, // 【平衡待定】has 是卡牌自带数值（作为 applyStatus 的 duration 使用时按**秒**解释）
+  stats: { atk: 6, has: 3 }, // 【平衡待定】has 是卡牌自带数值（作为 apply_status 的 duration 使用时按**秒**解释）
   tags: [],
   abilities: [
     {
       id: 1,
       kind: 'active',
-      actions: [{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }],
+      actions: [{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }],
     },
     {
       id: 2,
       kind: 'active',
-      actions: [{ do: 'applyStatus', target: 'self', status: 'haste', duration: { ref: 'self.has' } }],
+      actions: [{ do: 'apply_status', target: 'self', status: 'haste', duration: { ref: 'self.has' } }],
     },
   ],
 }
@@ -101,14 +101,14 @@ const EMBER_PRIEST: Card = {
     {
       id: 1,
       kind: 'active',
-      actions: [{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }],
+      actions: [{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }],
     },
     {
       id: 2,
       kind: 'active',
       actions: [
-        { do: 'gainStat', stat: 'poison', amount: { ref: 'self.poi' }, target: 'enemyPlayer' },
-        { do: 'gainStat', stat: 'burn', amount: { ref: 'self.bur' }, target: 'enemyPlayer' },
+        { do: 'gain_stat', stat: 'poison', amount: { ref: 'self.poi' }, target: 'enemy_player' },
+        { do: 'gain_stat', stat: 'burn', amount: { ref: 'self.bur' }, target: 'enemy_player' },
       ],
     },
   ],
@@ -130,13 +130,13 @@ const FIELD_MEDIC: Card = {
       id: 1,
       kind: 'passive',
       priority: 6, // 数值大者优先；缺省 5
-      trigger: { event: 'onPlayerDamaged' },
-      condition: { cmp: 'lt', left: { ref: 'ownPlayer.hpPct' }, right: 1 },
+      trigger: { event: 'on_player_damaged' },
+      condition: { cmp: 'lt', left: { ref: 'own_player.hp_pct' }, right: 1 },
       actions: [
-        { do: 'healPlayer', target: 'ownPlayer', amount: { ref: 'self.hel' } },
-        { do: 'gainStat', stat: 'regen', amount: { ref: 'self.reg' }, target: 'ownPlayer' },
+        { do: 'heal_player', target: 'own_player', amount: { ref: 'self.hel' } },
+        { do: 'gain_stat', stat: 'regen', amount: { ref: 'self.reg' }, target: 'own_player' },
         // 同时修复相邻卡：让 repair 原语也能被跑到（被 destroy 的相邻卡恢复）
-        { do: 'repair', target: 'adjacentToSelf' },
+        { do: 'repair', target: 'adjacent_to_self' },
       ],
     },
   ],
@@ -156,22 +156,22 @@ const BASTION_SMITH: Card = {
     {
       id: 1,
       kind: 'active',
-      actions: [{ do: 'dealDamage', target: 'enemyPlayer', amount: { ref: 'self.atk' } }],
+      actions: [{ do: 'deal_damage', target: 'enemy_player', amount: { ref: 'self.atk' } }],
     },
     {
       id: 2,
       kind: 'active',
       actions: [
-        { do: 'charge', target: 'adjacentToSelf', seconds: 0.5 },
-        { do: 'shield', target: 'ownPlayer', amount: { ref: 'self.shd' } },
+        { do: 'charge', target: 'adjacent_to_self', seconds: 0.5 },
+        { do: 'shield', target: 'own_player', amount: { ref: 'self.shd' } },
       ],
     },
     {
       id: 3,
       kind: 'passive',
       priority: 4, // 低于 field_medic 的 6：验证"数值大者优先"
-      trigger: { event: 'onPlayerDamaged' },
-      actions: [{ do: 'destroy', target: 'randomEnemyCard' }],
+      trigger: { event: 'on_player_damaged' },
+      actions: [{ do: 'destroy', target: 'random_enemy_card' }],
     },
   ],
 }
@@ -193,9 +193,9 @@ const DECK_B: readonly Placement[] = [
 // 技能样例：三条技能，priority 与时机词都不同，验证"同优先级时技能后于卡牌被动结算"
 // 以及"技能只在 trigger 命中的触发帧结算"。
 //
-// 【平衡待定】stats 数值仅用于观察链路：`ember_oath` 给敌方玩家叠 3 点灼烧（`gainStat` 走
+// 【平衡待定】stats 数值仅用于观察链路：`ember_oath` 给敌方玩家叠 3 点灼烧（`gain_stat` 走
 // `applyDot` 叠加），`second_wind`/`grave_pact` 各给本方玩家 +20 护盾。绑上 trigger 后
-// 三者都只在 battleStart 结算一次，不再每帧反复结算。
+// 三者都只在 battle_start 结算一次，不再每帧反复结算。
 const SKILLS_A: readonly Skill[] = [
   {
     id: 'ember_oath',
@@ -203,9 +203,9 @@ const SKILLS_A: readonly Skill[] = [
     version: 1,
     priority: 5,
     description: '示例技能：开局给敌方玩家叠灼烧',
-    trigger: { event: 'battleStart' },
+    trigger: { event: 'battle_start' },
     stats: { bur: 3 },
-    actions: [{ do: 'gainStat', stat: 'burn', amount: { ref: 'self.bur' }, target: 'enemyPlayer' }],
+    actions: [{ do: 'gain_stat', stat: 'burn', amount: { ref: 'self.bur' }, target: 'enemy_player' }],
   },
   {
     id: 'second_wind',
@@ -213,9 +213,9 @@ const SKILLS_A: readonly Skill[] = [
     version: 1,
     priority: 7,
     description: '示例技能：开局给本方玩家护盾',
-    trigger: { event: 'battleStart' },
+    trigger: { event: 'battle_start' },
     stats: { shd: 20 },
-    actions: [{ do: 'shield', target: 'ownPlayer', amount: { ref: 'self.shd' } }],
+    actions: [{ do: 'shield', target: 'own_player', amount: { ref: 'self.shd' } }],
   },
 ]
 const SKILLS_B: readonly Skill[] = [
@@ -225,9 +225,9 @@ const SKILLS_B: readonly Skill[] = [
     version: 1,
     priority: 7,
     description: '示例技能：开局给本方玩家护盾',
-    trigger: { event: 'battleStart' },
+    trigger: { event: 'battle_start' },
     stats: { shd: 20 },
-    actions: [{ do: 'shield', target: 'ownPlayer', amount: { ref: 'self.shd' } }],
+    actions: [{ do: 'shield', target: 'own_player', amount: { ref: 'self.shd' } }],
   },
 ]
 
