@@ -1,0 +1,54 @@
+# 回声探针（echoProbe）· 小 · 青铜 —— **纯被动探针卡**
+#
+# 覆盖：`on_player_healed` / `on_shield_gained` 两个时机词的**广播**（引擎已发出、参数已带上、能被触发器收到）。
+#   —— `on_shield_broken` 的观察点**不在本卡**，在同包的技能 `packs/test/skills/echoBreak.yml`：
+#      击穿只会发生在本包 A 方（B 方的盾只增不减），而本卡在 A 方会被 `bastionSmith` 的 `destroy` 打掉
+#      （实测 t=8 失效、A 的盾 t=15 才被击穿）⇒ 那一刻需要"不会被 destroy 影响"的监听者，即技能。
+#
+# ⚠️ 动作**刻意空转**：两条被动都只 `gain_stat cdp 0` —— `cdp` 修正**不参与**行动条周期
+#   （`actionPeriodCs` 只读卡面基础 `stats.cdp`）⇒ 对战斗零影响，也不产生任何卡牌侧事件。
+#   **不能**用 `repair` 当空转动作：`repair` 会广播 `on_card_repaired`，把同包那张卡牌侧探针
+#   （`echoNode`）喂成一路噪声。
+#
+# 两条条件都**引用该时机词的专属参数**：参数缺失时求值会直接抛错中止整局，
+#   所以"这两个词各自入过一次日志"本身就是参数齐全的证据。
+id: echoProbe
+name: 回声探针
+version: 1
+size: small
+cooldown: -1             # -1 = 纯被动物品：无行动条、不主动行动
+rarity: bronze
+description: 机制卡：两个时机词的广播探针（动作空转，不改变任何数值）
+
+stats:
+  atk: 1                 # 卡面必填；探针不主动行动，这个值不会被打出去
+  value: 1               # 卡牌价值（缺省取本卡品阶的 value）
+
+abilities:
+  - id: 1                # on_player_healed：player / amount（满血 0 治疗也广播）+ 两个清洗量
+    kind: passive
+    trigger: { event: on_player_healed }
+    condition:
+      all:
+        - { cmp: eq, left: { var: player }, right: { ref: own_player } }
+        - { cmp: gte, left: { var: amount }, right: 0 }            # 0 也算一次发生
+        - { cmp: gte, left: { var: cleansed_burn }, right: 0 }     # 引用它 = 证明该参数确实随广播给出
+        - { cmp: gte, left: { var: cleansed_poison }, right: 0 }
+    actions:
+      - do: gain_stat
+        stat: cdp
+        amount: 0
+        target: self
+
+  - id: 2                # on_shield_gained：专属参数 player / amount
+    kind: passive
+    trigger: { event: on_shield_gained }
+    condition:
+      all:
+        - { cmp: eq, left: { var: player }, right: { ref: own_player } }
+        - { cmp: gt, left: { var: amount }, right: 0 }
+    actions:
+      - do: gain_stat
+        stat: cdp
+        amount: 0
+        target: self

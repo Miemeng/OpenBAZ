@@ -1,0 +1,20 @@
+# 技能 · 凝霜领域（frostAura）**纯光环技能**（不绑时机）
+#
+# 覆盖：技能**不写 `trigger`、也不写 `actions`**，只给一条 `aura`
+#   ① 引擎把它当"有内容"的技能（不会播报 `skill.no_trigger_no_aura`）；
+#   ② 光环走独立的派生态通道，**不占触发栈**；
+#   ③ `mul` 只作用于卡牌 `stats`（此例 = 削弱敌方卡牌攻击 10%）。
+# ⚠️ 光环数值位一律写字面量（`factor` 是唯一允许字面量的数值通道；玩家侧禁止 mul）。
+id: frostAura
+name: 凝霜领域
+version: 1
+rarity: silver           # 技能品阶（必填，与卡牌同口径）；只用于表现层 / 筛选，不参与战斗计算
+priority: 3
+description: 纯光环技能：来源在场期间，敌方所有卡牌攻击 ×0.9
+
+heroes: [common]
+
+aura:
+  select: all_enemy_cards      # own / enemy 以**本技能持有方**视角解释
+  mul:
+    - { stat: atk, factor: 0.90 }

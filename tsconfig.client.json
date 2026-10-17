@@ -1,7 +1,7 @@
 {
   // 表现层专用配置：只有 client/ 会用 Vite + React 编译
   // 独立的原因：.tsx 不被 Node 类型擦除支持，且 jsx 选项对 engine/cards/simulator 无意义
-  // —— 见 AGENT.md §3 / §5.4、框架设计 §2.5.2
+  // —— 见  / 、框架设计
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",

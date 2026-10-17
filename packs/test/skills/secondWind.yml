@@ -1,0 +1,22 @@
+# 技能 · 再起之风（secondWind）—— 开局给自己一方套盾
+#
+# 覆盖：`shield` 作用于 `own_player` · `heroes` 写具体角色 id（须已被某个包注册）
+#       · **技能品阶 `rarity` = 本包的自定义品阶 `mythic`**（"已登记即可引用、不进合成链"同样适用于技能）
+id: secondWind
+name: 再起之风
+version: 1
+rarity: mythic           # 自定义品阶也能给技能用（只验证"已登记"；合成链只管卡牌）
+priority: 7
+description: 开局给自己一方 +20 护盾
+
+heroes: [testHeroA]      # 只有测试角色·甲能学（同一个包内的角色，校验不会误报）
+
+stats:
+  shield: 20
+
+trigger: { event: battle_start }
+
+actions:
+  - do: shield
+    target: own_player
+    amount: { ref: self.shield }

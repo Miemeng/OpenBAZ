@@ -1,0 +1,36 @@
+# 踏灰者（ashRunner）· 小 · 青铜 —— 主动伤害 + 自我加速 + `everyN` 计数变体
+#
+# 覆盖：`apply_status` → `haste`（时长引用 `self.haste`）· `everyN`（只在本卡第 N 的整数倍次行动结算）
+id: ashRunner
+name: 踏灰者
+version: 1
+size: small
+cooldown: 1.50
+rarity: bronze
+description: 机制卡：每 2 次主动行动给自己上一段加速
+
+stats:
+  atk: 8
+  speed: 1.0
+  cdp: 100.0
+  haste: 2.00            # 加速时长（秒）—— 作为 apply_status 的 duration 引用
+  value: 1
+
+tags: [human, fire]
+
+abilities:
+  - id: 1
+    kind: active             # 主动效果共用唯一行动条，按书写顺序依次结算
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }
+
+  - id: 2
+    kind: active
+    everyN: 2                # 仅本卡第 2、4、6… 次主动行动时结算（≥2）
+    actions:
+      - do: apply_status
+        target: self
+        status: haste        # 加速：行动条速度 ×2
+        seconds: { ref: self.haste }   # 卡牌状态的时长字段是 `seconds`（`duration` 只属 gain_stat 的 DOT 通道）

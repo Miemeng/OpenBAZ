@@ -111,7 +111,7 @@ function verify({ label, file, expect }) {
   else notes.push(`${label} ✓`)
 }
 
-// eslint.config.js 的加载期陷阱（本仓库真实踩过，见 AGENT.md §5.4）：
+// eslint.config.js 的加载期陷阱：
 // 块注释里如果出现"注释开始符 + 反引号 + 含注释结束符的 glob + 反引号"这种组合，
 // Node 解析该文件时会报与真实位置无关的 "SyntaxError: Unexpected token '.'"，
 // 表现为 `npm run lint` 整份配置加载失败——而且这条路径**不经过任何 ESLint 规则**，
@@ -167,6 +167,44 @@ verify({
 
 checkEslintConfig('eslint.config.js')
 
+// 引擎版本唯一来源（ `` 结论）：engine/version.ts 的 ENGINE_VERSION 必须与
+// package.json.version 一致 —— 正式版之前两者都是 0.0.0，正式版确认为 1.0.0。
+// 只读文件、不 import TS（本脚本是纯文本校验，见文件头说明）。
+function checkEngineVersion() {
+  const label = 'engine/version.ts（引擎版本唯一来源）'
+  let source
+  let pkg
+  try {
+    source = readFileSync(join(root, 'engine/version.ts'), 'utf8')
+    pkg = parseJsonc(readFileSync(join(root, 'package.json'), 'utf8'))
+  } catch (error) {
+    failures.push({ label, problems: [`无法读取 engine/version.ts 或 package.json：${error.message}`] })
+    return
+  }
+  const match = /export const ENGINE_VERSION = '([^']+)'/.exec(source)
+  const engineVersion = match?.[1]
+  if (engineVersion === undefined) {
+    failures.push({
+      label,
+      problems: ["未找到 `export const ENGINE_VERSION = 'x.y.z'`"],
+    })
+    return
+  }
+  if (engineVersion !== pkg.version) {
+    failures.push({
+      label,
+      problems: [
+        `ENGINE_VERSION（${engineVersion}）应等于 package.json.version（${pkg.version}）`,
+        '正式版之前两者都保持 0.0.0；正式版确认为 1.0.0（ ``）',
+      ],
+    })
+    return
+  }
+  notes.push(`${label} ✓（${engineVersion}）`)
+}
+
+checkEngineVersion()
+
 for (const note of notes) console.log(`  ${note}`)
 if (failures.length > 0) {
   console.error('\n配置验收未通过：')
@@ -176,5 +214,5 @@ if (failures.length > 0) {
   }
   process.exitCode = 1
 } else {
-  console.log('\n配置验收通过（零源码期：配置本身有效；源码类型检查待第一个 .ts 落地）')
+  console.log('\n配置验收通过')
 }

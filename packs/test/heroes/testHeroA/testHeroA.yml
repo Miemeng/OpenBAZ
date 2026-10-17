@@ -1,0 +1,18 @@
+# ============================================================
+# 角色 —— 测试角色·甲（testHeroA）
+# 目录名 / 文件名 / 文件内 id 三者必须逐字一致
+# 字段定义见；角色**只有 7 个字段**
+# ============================================================
+
+id: testHeroA
+name: 测试角色·甲
+version: 1
+
+initHp: 300              # 初始血量
+initMaxHp: 300           # 血量上限（缺省 = initHp）
+levelupMaxHp: [100, 200, 300, 400]
+                         # 升级提升的上限：第 n 项 = 升到第 (n+1) 级时 +该值（升级机制尚未实现，占位）
+
+description: 测试卡包的默认角色（满血开局）
+# 头像：images/heroes/testHeroA/avatar.png（文件名固定 avatar.png；缺失由客户端回落缺省头像）
+# 立绘：images/heroes/testHeroA/portraits/*.png

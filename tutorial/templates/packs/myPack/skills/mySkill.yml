@@ -1,0 +1,66 @@
+# ============================================================
+# 技能模板（**完整档**：每个字段都写出来，按需删改）
+# 复制 → 改名成 <技能id>.yml（文件名 = 文件内 id，本模板 mySkill）
+# 字段定义见；命名口径：**字段名与 id 都是驼峰**
+# ★ 技能**并入卡包自己的 pack.yml**（写在 `skills:` 清单里），不再单独一份技能包 pack.yml
+# ============================================================
+
+# ---------- 基础信息（必填）----------
+id: mySkill          # 必须与文件名逐字一致
+name: 我的技能
+version: 1           # ≥1；每次修改任意字段 +1
+rarity: bronze       # ★ 必填（与卡牌同口径）：本技能的**品阶**，引用品阶表
+                     #（内置 bronze / silver / gold / diamond；包内 rarities.yml 可自定义）
+                     # 只用于表现层（技能框素材 `images/frames/<品阶 frame>/skill_frame.png`）与筛选，
+                     # **不参与战斗计算**；**技能不进合成链**（合成只作用于卡牌）
+
+# ---------- 图标（**没有 icon 字段**）----------
+# ★ 技能图标走**文件名约定**：images/skills/mySkill.png（写 `icon:` 会被校验直接拒绝）
+
+# ---------- 扩展信息（选填）----------
+priority: 5          # 与卡牌被动同台比较，1–10；同优先级时技能后结算
+description: 示例技能
+
+# ---------- 归属（技能的唯一归属来源；**必填、不可省略**）----------
+heroes:              # ★ 本技能可被哪些英雄购买 / 学习；须与角色文件 id 一致
+  - myHero
+# 所有英雄都可用 → 写 common
+# 所有英雄都不可用（特殊情况下获得，如活动 / 掉落 / 彩蛋）→ 写 sp
+# 也可混写，如 heroes: [common, myHero]（等价于 common）；common / sp 是保留字，不是英雄 id
+
+# ---------- 数值（技能效果数值的唯一来源）----------
+stats:
+  shield: 20         # actions 里一律用 self.shield 引用，不写硬数值
+
+# ---------- 触发（选填）----------
+# 写了 → 只在匹配事件的触发帧结算，且**同一触发帧内至多结算一次**；
+# 不写 → 该技能**不进触发栈、整局不会结算**；只有在**既没有 trigger、也没有 aura** 时，
+#        引擎才在开局播报 note 级提示 skill.no_trigger_no_aura。
+# **纯光环技能** → 不写 trigger，改为写顶层 aura。
+# 技能**无冷却**。条件与动作字段与卡牌被动完全同形（condition / actions）。
+trigger: { event: battle_start }
+
+# ---------- 效果列表（必填，至少 1 条）----------
+actions:
+  - do: shield
+    target: own_player
+    amount: self.shield
+
+# ---------- 光环 aura（选填；有 aura 即视为"有内容"）----------
+# 光环 = "来源在场期间持续对外施加的数值修饰"，**不落状态**，来源没了下一帧就消失。
+# 字段定义见 ；结构与口径的**唯一权威**是。
+# 要点：select 必填（与 actions.target 同一套选择器语法）；apply / mul 至少写一条；
+#       **数值位一律写字面量**；speed 与 haste / slow / freeze（状态）禁止；
+#       **玩家目标只接受 burn / poison / regen 的固定数值 apply**。
+# 触发器与光环"二选一"：写了 `trigger` 就照 `trigger` 结算，纯光环技能则不写 `trigger`。
+#
+# aura:
+#   select: all_own_cards          # 目标（缩写或查询对象）；own / enemy 以**本技能持有方**视角解释
+#   apply:                         # 平铺：正数增强、负数削弱
+#     - { stat: atk, amount: 3 }
+#   # mul:                         # 倍率（两位小数，倍率之间加算）；玩家侧禁止使用
+#   #   - { stat: atk, factor: 1.50 }
+#   # condition:                   # 选填：为假 ⇒ 本帧贡献 0
+#   #   cmp: gt
+#   #   left: { ref: self.shield }
+#   #   right: 0

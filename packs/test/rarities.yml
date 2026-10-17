@@ -1,0 +1,45 @@
+# 品阶与卡牌价值 —— 测试卡包自己的表（packs/test/rarities.yml）
+#
+# 口径来源： ``+ ：
+#   ① **价值挂在品阶上**（`value` / `prize`），基础规则表在 `packs/base/rarities.yml`，
+#      引擎另有一份内置兜底（bronze 1 / silver 3 / gold 8 / diamond 20）；
+#   ② **自定义品阶可以登记**（供卡牌 `rarity` 引用），但**不得进入 `upgrade` 合成链**（校验期 error）；
+#   ③ 卡牌写了未登记的品阶 ⇒ **直接报错**（不支持"宽松解析"）。
+#
+# 本表 = 内置四档（原样重列，方便对照）+ **一个自定义品阶 `mythic`**：
+#   它的用途是演示"**自定义品阶 / 卡框是表现层资源、不影响战斗逻辑**"（用户故事 1 的验收项之一）。
+#
+# **卡框素材的约定（v0.18 起：每个品阶一个文件夹）**：
+#   `frame` 的取值 = **卡框文件夹名**（惯例与品阶 id 同名），两张框放在同一个文件夹里、用**固定文件名**区分：
+#     卡框   `packs/<pack_id>/images/frames/<frame>/card_frame.png`
+#     技能框 `packs/<pack_id>/images/frames/<frame>/skill_frame.png`   ← 圆形贴图（透明背景 + 只画环/材质）
+#   渲染优先级 = **品阶 `frame` > 品阶 `color`（纯色兜底）** —— 卡面**没有** `frame` 字段；
+#   卡框用**九宫格**画（切片 24px、四角不拉伸、**中间不画**）；读取层不解析路径、不校验图片是否存在。
+#   ⚠️ 现在仓库里**还没有这两张素材**（缺图不画，不阻塞）—— 画好放进来即可生效。
+
+rarities:
+  - id: bronze
+    name: 青铜
+    color: "#8d6e63"
+    value: 1
+  - id: silver
+    name: 白银
+    color: "#b0bec5"
+    value: 3
+  - id: gold
+    name: 黄金
+    color: "#ffc107"
+    value: 8
+  - id: diamond
+    name: 钻石
+    color: "#00e5ff"
+    frame: diamond           # 素材 = images/frames/diamond/{card_frame,skill_frame}.png
+    value: 20
+  - id: mythic               # ✅ **自定义品阶**：可登记、**可被卡牌 `rarity` 引用**，但**不得进入 upgrade 链**
+    name: 秘银
+    color: "#7c4dff"
+    frame: mythic            # 素材 = images/frames/mythic/{card_frame,skill_frame}.png（缺失由前端回落 `color` 纯色，不阻塞）
+    value: 40
+
+# 二合一合成链（按升序书写）：**链上只允许内置四档** —— `mythic` 故意不进链
+upgrade: [bronze, silver, gold, diamond]

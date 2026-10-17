@@ -1,0 +1,75 @@
+# 铁壁（ironWall）· 大 · 白银 —— 三条能力共用一个行动条 + `everyN` 护盾 + 被动治疗
+#
+# 覆盖：size=large（占 3 格）· **一张卡多条主动**（共用唯一行动条、按书写顺序结算）·
+#       `everyN: 3` · `shield` · 表达式 `{ mul }` / `{ add }` · 被动 `condition` 的 `all` + `not` ·
+#       `heal_player` · `gain_stat`（`regen` → 玩家侧持续效果）
+id: ironWall
+name: 铁壁
+version: 1
+size: large
+cooldown: 3.00
+rarity: silver
+description: 机制卡：大体积慢速；每 3 次行动套盾；受伤且血量中等时治疗自己一方
+
+stats:
+  atk: 60
+  speed: 1.0
+  cdp: 100.0
+  shield: 40             # 护盾量
+  heal: 12               # 治疗量
+  regen: 2               # 再生层数（HoT）
+  value: 3
+
+tags: [construct]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }
+
+  - id: 2
+    kind: active
+    everyN: 3            # 第 3、6、9… 次行动额外套盾
+    actions:
+      - do: shield
+        target: own_player
+        amount: { mul: [{ ref: self.shield }, 1.5] }   # 表达式数值：护盾 = shield × 1.5
+
+  - id: 4
+    kind: active
+    actions:
+      - do: enchant              # 演示：首次行动给自己挂"壁垒"，之后每次行动末尾多跑一次它的回血
+        target: self
+        enchant: aegis
+
+  - id: 3
+    kind: passive
+    priority: 7          # 数值大者先结算（同类触发器之间）
+    trigger: { event: on_player_damaged }
+    condition:           # 血量在 20%–60% 之间才治（覆盖 all + not + cmp）
+      all:
+        - { cmp: lt, left: { ref: own_player.hp_pct }, right: 0.6 }
+        - not: { cmp: lt, left: { ref: own_player.hp_pct }, right: 0.2 }
+    actions:
+      - do: heal_player
+        target: own_player
+        amount: { add: [{ ref: self.heal }, { ref: self.regen }] }   # 治疗 = 治疗值 + 再生值
+      - do: gain_stat
+        stat: regen
+        amount: { ref: self.regen }
+        target: own_player
+
+# 附魔目录（演示"活得久的宿主"）：**卡面不写 `enchant`**，由上面 ability#4 的 `do: enchant` 施加
+enchantments:
+  - id: aegis
+    name: 壁垒
+    color: '#74c0fc'
+    stats:
+      heal: 2
+    actions:
+      - do: heal_player
+        target: own_player
+        amount: { ref: self.heal }   # 引用属性（ironWall 的 heal=12）⇒ 不触发"字面量"警告

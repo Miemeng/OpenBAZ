@@ -1,0 +1,24 @@
+# 阵容样例（`decks/example.yml`）—— 供 `--deckA` / `--deckB` 使用
+# 格式规范见；口径见
+#
+# 用法：
+#   node simulator/run.ts --deckA decks/example.yml --deckB decks/example.yml --seed 42
+#   node simulator/run.ts --deckA tutorial/templates/packs/...（教学包阵容）--pack tutorial/templates/packs
+#
+# 规则要点：
+#   ① hero 必填（血量取它的 initHp / initMaxHp）
+#   ② cards[].slot 必填（左端格号，1 基、1–10）；缺了报 error
+#   ③ 同一 card id 出现多次不限（几何与 10 格是唯二约束）
+
+name: 示例阵容            # 选填：显示名；不写则用文件名
+hero: myHero             # 必填：角色 id（须已在某个包里注册）
+
+# hp: 300                # 选填：覆盖角色血量（调试 / 模拟模式专供）
+# maxHp: 300             # 选填：覆盖血量上限；缺省 = 角色的 initMaxHp，再缺省 = 生效的 hp
+
+cards:                   # 必填：场上卡牌（只引用已注册的 id）
+  - id: myCard
+    slot: 1              # 左端所在格
+
+skills:                  # 选填：该玩家携带的技能（注册 id 列表）
+  - mySkill

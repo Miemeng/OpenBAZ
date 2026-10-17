@@ -8,10 +8,18 @@ npm-debug.log*
 .vite/
 coverage/
 
+# 前端构建期产物：由 `npm run packs:manifest`（= `prebuild:web`）从 packs/ 与 decks/ 生成
+#   packs.manifest.json = 读取层产物的序列化；packs/<packId>/images/ = 卡图等资源的拷贝；
+#   decks.json = decks/ 下阵容的原文（前端"只读导入"用）。
+#   三者都是**派生物**，源在 packs/ 与 decks/（那两份必须入库），故这里忽略。
+client/public/packs.manifest.json
+client/public/packs/
+client/public/decks.json
+
 # 探针 / 诊断输出（如 simulator/__probe_trace__.out.txt）
 *.out.txt
 
-# 内部设计文档目录：**暂时不入库**（RW 指示，v0.28）——只保留在本地
+# 内部设计文档目录：**暂时不入库**——只保留在本地
 #   将来要恢复入库：删掉下面这一行；若 docs/ 已被提交过历史版本，另用 git rm -r --cached docs
 docs/
 
@@ -22,9 +30,10 @@ Thumbs.db
 .vscode/*
 !.vscode/settings.json
 
-# 注意：packs/ skills/ drafts/ decks/ rarities.yml 是**工作区数据，必须入库**（框架 §3）
-#      不要把它们当作构建产物忽略掉。
+# 注意：packs/（唯一数据根）· drafts/ · decks/ · card_values.yml 是**工作区数据，必须入库**
+#      不要把它们当作构建产物忽略掉。顶层 skills/ · heroes/ · rarities.yml 已按单一数据根作废。
 #      对外教程与 YAML 模板放 tutorial/（**入库**）；内部设计文档在 docs/（**暂不入库**）。
 
 AGENT.md
 #AGENT约束不放入git
+log.txt

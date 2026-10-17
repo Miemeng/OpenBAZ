@@ -1,0 +1,35 @@
+# 技能 · 破盾回声（echoBreak）—— **纯探针技能**：只为验证 `on_shield_broken` 的广播
+#
+# 覆盖：`on_shield_broken`（护盾池被一次伤害从 >0 打空）。
+#
+# ⚠️ **为什么用技能而不是卡**：这个时机词要看"护盾池掉到 0"，而在 `packs/test` 的两张阵容里
+#   只有 **A 方**会发生（B 方的盾每 4 秒 +25、只增不减），而 A 方那张探针**卡**
+#   （`echoProbe`）会被 `bastionSmith` 的 `destroy` 打掉 —— 实测 t=8 失效、A 的盾 t=15 才被击穿
+#   ⇒ 广播发生了却**没有活着的监听者**。
+#   **技能不会被 `destroy` 影响**，故把击穿这个观察点放在技能上才稳。
+#
+# ⚠️ 动作同样**空转**：`gain_stat` 的 `cdp` 修正 **+0** —— `cdp` 修正不参与行动条周期
+#   （`actionPeriodCs` 只读卡面基础 `stats.cdp`）⇒ 零影响，也不产生任何卡牌侧事件
+#   （**不能**用 `charge` / `repair` / `apply_status` 当空转动作 —— 那三个正是 `echoNode` 要观察的词）。
+#
+# 条件引用该时机词的专属参数 `overflow` —— 参数缺失时求值会直接抛错中止整局。
+id: echoBreak
+name: 破盾回声
+version: 1
+rarity: bronze           # 技能品阶（必填，与卡牌同口径）；探针技能给最低档
+description: 探针技能：本方护盾被击穿时留下一笔日志（动作空转，不改变任何数值）
+
+heroes: [testHeroA, testHeroB]   # 两张测试阵容的英雄都能学（哪一方被击穿都能观察到）
+
+trigger: { event: on_shield_broken }
+
+condition:
+  all:
+    - { cmp: eq, left: { var: player }, right: { ref: own_player } }
+    - { cmp: gte, left: { var: overflow }, right: 0 }
+
+actions:
+  - do: gain_stat
+    stat: cdp
+    amount: 0                    # 空转：cdp +0，不参与行动条周期
+    target: all_own_cards

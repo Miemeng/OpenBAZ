@@ -1,0 +1,86 @@
+# 灰烬狼（emberWolf）· 小 · 青铜 —— 主动单体伤害 + **品质继承覆盖**演示
+#
+# 覆盖：size=small · rarity=bronze · `deal_damage`（引用 `{ ref: self.atk }`）·
+#       `tags` / `hiddenTags` · `stats.value` · `inheritOverride`
+# ⚠️ `inheritOverride` 是**校验期特性**（引擎尚未实现二合一合成）：每段 `stats` 是**增量**、
+#    `abilities` **按 id 合并覆盖**（要覆盖哪条就完整写出那条的 `actions`）。
+# ⚠️ **卡面没有 `frame` 字段**：卡框由**品阶**决定。
+id: emberWolf
+name: 灰烬狼
+version: 1
+size: small
+cooldown: 2.00           # 秒（两位小数）；-1 = 纯被动物品
+rarity: bronze
+description: 机制卡：主动伤害 + 品质继承覆盖（引擎尚未实现合成，此处只走校验）
+
+stats:
+  atk: 20                # 卡牌必填；不内置普攻，伤害必须由效果显式声明
+  speed: 1.0             # 行动条速度倍率（缺省 1）
+  cdp: 100.0             # 冷却百分比系数（缺省 100）
+  value: 1               # 卡牌价值（缺省取本卡品阶的 value）
+
+tags: [beast, fire]      # 参与战斗内选择器筛选
+hiddenTags: [starter]    # 隐藏词条：不进卡面、只参与商店过滤
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: enchant              # 先给自己挂上绿宝石（每次行动重复施加一次 = 整件替换，幂等）
+        target: self
+        enchant: emerald
+      - do: deal_damage
+        target: enemy_player     # 伤害只能作用于玩家（打卡牌 = 校验期 error）
+        amount: { ref: self.atk }
+
+# 附魔：**卡面只写目录**（这张卡"能有哪些附魔"）。
+# ⚠️ "当前生效哪一件"是**运行期状态**，卡面**不写** `enchant`（写了直接校验报错）——
+#    由 `do: enchant` 在局内施加；"出厂自带附魔"将来走**购买阶段 trigger**。
+enchantments:
+  - id: obsidian               # 光环型：本卡攻击翻倍
+    name: 黑曜石               # 显示名（缺省回落 id；只用于表现层）
+    color: '#b197fc'           # 玩家自定义色（#rrggbb；缺省回落内置附魔色）
+    aura:
+      select: self
+      mul:
+        - stat: atk
+          factor: 2
+  - id: emerald                # 属性 + 动作型：让本卡"具有治疗属性"，并追加一条回血动作
+    name: 绿宝石               # 显示名（缺省回落 id；只用于表现层）
+    color: '#51cf66'           # 玩家自定义色
+    stats:
+      heal: 0                  # 生效期间并入卡牌 stats（消失即移除）；让"治疗类"选择器能选中它
+    actions:
+      - do: heal_player
+        target: own_player
+        amount:                      # 回复量 = 本卡攻击 + 附魔自带回复量
+          add:
+            - ref: self.atk
+            - ref: self.heal         # `self.heal` 来自**本件附魔**自带的 stats
+
+# 品质继承：本卡最低品阶 = bronze ⇒ 后续沿链的三段（silver → gold → diamond）逐段给写法
+inheritOverride:
+  - rarity: silver
+    stats: { atk: 20 }           # 增量：白银版 = 20 + 20 = 40
+    abilities:
+      - id: 1
+        actions:
+          - do: deal_damage
+            target: enemy_player
+            amount: { ref: self.atk }
+  - rarity: gold
+    stats: { atk: 40 }
+    abilities:
+      - id: 1
+        actions:
+          - do: deal_damage
+            target: enemy_player
+            amount: { ref: self.atk }
+  - rarity: diamond
+    stats: { atk: 80 }
+    abilities:
+      - id: 1
+        actions:
+          - do: deal_damage
+            target: enemy_player
+            amount: { ref: self.atk }

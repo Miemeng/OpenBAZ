@@ -1,0 +1,43 @@
+# 缚霜者（frostBinder）· 中 · 白银 —— 冰冻 / 减速 + 只 `apply` 的友方攻击光环
+#
+# 覆盖：`apply_status` → `freeze`（速度 = 0，行动条停格）与 `slow`·
+#       光环**只有 apply**（没有 mul 的合法形态）· 两条主动共用同一行动条
+id: frostBinder
+name: 缚霜者
+version: 1
+size: medium
+cooldown: 3.00
+rarity: silver
+description: 机制卡：冻结与减速全体敌方卡牌，同时给友方卡牌加攻
+
+stats:
+  atk: 12
+  speed: 1.0
+  cdp: 100.0
+  freeze: 1.50           # 冰冻时长（秒）
+  slow: 2.00             # 减速时长（秒）
+  value: 3
+
+tags: [human, ice]
+
+aura:
+  select: all_own_cards
+  apply:
+    - { stat: atk, amount: 2 }
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: apply_status
+        target: all_enemy_cards
+        status: freeze
+        seconds: { ref: self.freeze }
+
+  - id: 2
+    kind: active
+    actions:
+      - do: apply_status
+        target: all_enemy_cards
+        status: slow
+        seconds: { ref: self.slow }

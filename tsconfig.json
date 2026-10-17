@@ -1,7 +1,7 @@
 {
-  // 单包（非 monorepo）；边界靠 ESLint 导入限制强制，不靠包 —— 见 AGENT.md §3 / §5.4
+  // 单包（非 monorepo）；边界靠 ESLint 导入限制强制，不靠包 —— 见  /
   // 语法子集：只写"可擦除语法"，三条链路取交集（node 原生擦除 / Vitest-esbuild / tsc）
-  // —— 见框架设计 §2.5.3 与 AGENT.md §5.4；本文件不得加入 paths 别名（Node 不读 tsconfig）
+  // —— 见框架设计  与 ；本文件不得加入 paths 别名（Node 不读 tsconfig）
   "compilerOptions": {
     "target": "esnext",
     "module": "nodenext",

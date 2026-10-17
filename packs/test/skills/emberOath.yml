@@ -1,0 +1,23 @@
+# 技能 · 余烬誓约（emberOath）—— 开局给敌方玩家叠灼烧
+#
+# 覆盖：技能 `trigger: battle_start`（已广播的三个时机词之一）· `gain_stat` 施加 `burn` 给**敌方玩家** ·
+#       `heroes: [common]`（保留字 = 所有英雄都可用）
+id: emberOath
+name: 余烬誓约
+version: 1
+rarity: gold             # 技能品阶（必填，与卡牌同口径）；只用于表现层 / 筛选，不参与战斗计算
+priority: 5              # 与卡牌被动同台比较；同优先级时技能后结算
+description: 开局给敌方玩家叠 3 层灼烧
+
+heroes: [common]         # 技能归属：可被哪些英雄购买 / 学习（common = 所有英雄）
+
+stats:
+  burn: 3                # 技能效果数额只能引用**本技能** stats
+
+trigger: { event: battle_start }
+
+actions:
+  - do: gain_stat
+    stat: burn
+    amount: { ref: self.burn }
+    target: enemy_player

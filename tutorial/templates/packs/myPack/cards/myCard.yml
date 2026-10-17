@@ -1,0 +1,138 @@
+# ============================================================
+# 卡牌模板（**完整档**：每个字段都写出来，按需删改）
+# 复制 → 改名成 <卡牌id>.yml（文件名 = 文件内 id，本模板用 myCard）
+# 字段定义见 / ；命名口径：**字段名与 id 都是驼峰**，
+#   而**封闭词表的值仍小写下划线**（deal_damage / enemy_player / on_player_damaged …）
+# ============================================================
+
+# ---------- 基础信息（必填）----------
+id: myCard               # 必须与文件名逐字一致；首字符字母，其余字母 / 数字 / 下划线
+name: 我的卡牌            # 显示名
+version: 1               # ≥1；每次修改任意字段 +1
+size: small              # small = 1格 / medium = 2格 / large = 3格
+cooldown: 5.00           # 冷却（秒，两位小数）；-1 = 纯被动物品（无行动条、不主动行动）
+rarity: bronze           # **最低品阶**，引用品阶表（内置 bronze / silver / gold / diamond）
+
+# ---------- 扩展信息（选填）----------
+description: 一张示例卡     # 卡牌描述（设计风味），小字显示在悬浮窗内
+slots: 1                 # 覆盖 size 推导的占位格数（small/medium/large = 1/2/3）；≥1
+# owner: myHero           # 归属：本卡自写的**优先**；不写则由所属包 pack.yml 的 owner 在加载期补齐
+                         #   ⚠️ 写了但与所属包 owner 不一致 ⇒ 以本卡为准 + 校验期**一条 note**
+                         #   （本模板所属包的 owner 是 common，所以这里默认注释掉、避免那条 note）
+# ⚠️ **卡面没有 `frame` 字段**：卡框**只由品阶决定**
+#    品阶表（rarities.yml）的 `frame` 指到 `images/frames/<frame>/card_frame.png`（同文件夹里还有技能框
+#    `skill_frame.png`），不写则用该品阶的 `color` 纯色
+
+# ---------- 数值（开放数值表：效果数值的唯一来源）----------
+stats:
+  atk: 10                # 攻击数值（**卡牌必填**；不内置普攻，伤害必须由效果显式声明）
+  speed: 1.0             # 行动条速度倍率（缺省 1；> 0）
+  cdp: 100.0             # 冷却百分比系数（缺省 100；> 0）
+  shield: 10             # 护盾数值
+  heal: 10               # 治疗数值
+  burn: 1                # 灼烧数值
+  poison: 1              # 剧毒数值
+  regen: 1               # 再生数值
+  haste: 1.00            # 加速时长（秒）
+  slow: 1.00             # 减速时长（秒）
+  freeze: 1.00           # 冰冻时长（秒）
+  charge: 1.00           # 充能时长（秒）
+  value: 2               # **卡牌价值**：缺省取本卡当前品阶的 value（见 packs/base/rarities.yml）
+
+# ---------- 多重触发（选填）----------
+multicast: 1             # 行动条充满后主动行动的次数（缺省 1）；>1 时卡面标 *N
+
+# ---------- 标签（选填）----------
+tags: []                 # 类型标签，供"每有一个X"类效果计数、供选择器 tags 筛选
+hiddenTags: []           # 隐藏词条：不显示在卡面；**只参与商店过滤，不参与战斗内选择器筛选**
+
+
+# ---------- 能力列表（可为空，引擎不因此报错）----------
+abilities:
+  - id: 1                # 卡内唯一、不可重复（供 inheritOverride 按 id 定位覆盖）
+    kind: active         # active = 挂行动条；passive = 挂触发器
+    # everyN: 3          # 仅 active：只在本卡第 3、6、9… 次主动行动时结算（≥2；缺省每次都结算）
+                         # ⚠️ 本模板只有这一条主动效果 ⇒ 写 everyN: 3 会让它**只在第 3 次行动时**才触发
+    actions:
+      - do: deal_damage          # 动作原语（封闭词表 8 条）
+        target: enemy_player     # 伤害只能作用于**玩家**（打卡牌 = 校验期错误）
+        amount: self.atk         # 效果数额：应写 { ref: self.<stat> }（可简写 self.atk）
+                                 #   写字面量只报一条 warn、照字面量执行
+
+  - id: 2
+    kind: passive        # 被动：trigger 必填、priority 选填
+    priority: 5          # 1–10，数值大者优先；同优先级按加载顺序
+    trigger: { event: on_player_damaged }   # 时机词见本文件末尾的时机词表
+    condition:                              # 选填：为假 ⇒ 本次不结算
+      all:
+        - { cmp: eq, left: { var: player }, right: { ref: enemy_player } }
+        - { cmp: lt, left: { ref: own_player.hp_pct }, right: 0.3 }
+    actions:
+      - do: gain_stat
+        stat: atk
+        amount: 2            # buff 类加值**允许字面量**
+        stackLimit: 5        # 层数上限：达上限后替换同 stat、同 source 最早一层并刷新时长
+        target: self
+                             # ⚠️ `duration` 只在「gain_stat + 玩家目标 + burn/poison/regen」通道允许；
+                             #    卡牌侧属性修正是**永久**的（不加 duration）。要在卡牌侧加时长，需先扩展规范。
+
+# ---------- 附魔（选填）----------
+# ⚠️ **当前写入即校验 error**⇒ 本段整段注释，只作设计参考。
+# enchant:
+#   - do: gain_stat
+#     stat: atk
+#     amount: self.atk
+#     target: self
+
+# ---------- 光环 aura（选填；与 abilities / enchant 平级、不占 kind）----------
+# 卡牌在场期间**持续对外**施加的只读数值修饰（派生态：不落状态、无层数、无时长；来源离场下一帧失效）。
+# 结构与口径的唯一权威 = ；字段定义见。
+# 要点：select 必填；apply / mul 至少一条；**数值位一律写字面量**；speed 与 haste / slow / freeze 禁止；
+#       玩家侧只接受 burn / poison / regen 的固定数值 apply（玩家护盾与任何倍率都会抛错中止对局）。
+#
+# aura:
+#   select: all_own_cards
+#   apply:
+#     - { stat: atk, amount: 2 }
+#   mul:
+#     - { stat: atk, factor: 1.20 }
+#   condition: { cmp: gt, left: { ref: this.atk }, right: 0 }   # this = 本卡
+
+# ---------- 品质继承覆盖（选填）----------
+# 从本卡最低品阶（rarity）的**下一阶**起、沿合成链每阶一段；stats 为**增量**，abilities 按 id 合并覆盖。
+# 分级：**漏写** ⇒ warn（该阶按最低品阶的写法继承）；**写在本卡品阶之前 / 链外** ⇒ error；
+#                 **重复同一阶** ⇒ error；**已是最高阶还给段** ⇒ warn。
+#
+# inheritOverride:
+#   - rarity: silver           # 白银段
+#     stats: { atk: 10 }       # 增量 +10
+#     abilities:
+#       - id: 2                # 按 id 定位；condition / actions 需全写（kind 沿用）
+#         condition:
+#           all:
+#             - { cmp: eq, left: { var: player }, right: { ref: enemy_player } }
+#         actions:
+#           - do: gain_stat
+#             stat: atk
+#             amount: 2
+#             target: self
+
+# ============================================================
+# 时机词表
+#
+# ⚠️ 写 `trigger: { event: … }` 前务必看清两栏：
+#   ✅ 已落地 = **引擎真的会广播**，可以放心写；
+#   ⏳ 未广播 = 词典里有、但引擎**目前没有广播点** ⇒ 能过校验（只报一条 warn），但**整局不会结算**。
+#
+# ---------- ✅ 已落地（3 词）----------
+#   battle_start          摆盘完成、首个触发帧之前，广播一次
+#   after_action          任意卡牌主动行动完成之后（别名 on_action，统一写 after_action）
+#   on_player_damaged     任一玩家受到实际伤害结算后（含灼烧 / 剧毒跳伤）
+#
+# ---------- ⏳ 词典已有、引擎未广播（14 词）----------
+#   battle_end · before_action
+#   on_player_healed · on_shield_gained · on_shield_broken
+#   on_card_destroyed · on_card_repaired
+#   on_card_frozen · on_card_hasted · on_card_slowed · on_card_charged
+#   on_burn_tick · on_poison_tick · on_regen_tick
+# ============================================================

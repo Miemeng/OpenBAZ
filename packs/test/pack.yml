@@ -1,0 +1,73 @@
+# ============================================================
+# 卡包定义 —— 测试卡包（test）
+#
+# 定位（ `` = A"先落实 core 这个包用来测试（或者考虑改名 test），
+#   然后尽量把光环、技能、卡牌、主动被动等各种效果都测一下"）：
+#   **内置的"机制覆盖包"** —— 目的不是好玩，而是让**引擎的每一条机制都至少被跑到一次**，
+#   既当模拟模式的首批演示数据（用户故事 1 的"内置基础卡包"），也当回归与前端联调的活样本。
+#   **数值一律是占位**。
+#
+# 覆盖矩阵（改动本包时请同步维护这张表）：
+#   尺寸 × 品阶：small ×5 / medium ×3 / large ×2；bronze ×3 / silver ×4 / gold ×1 / diamond ×1 / **自定义品阶 `mythic` ×1**
+#     （`mythic` 只登记在本包 `rarities.yml`、**不在 `upgrade` 链上** —— 可被卡牌引用）
+#   八个动作原语：deal_damage · heal_player · gain_stat · shield · apply_status · charge · destroy · repair
+#   三种卡牌状态：haste（ashRunner / ironWall / **echoNode#7**）× slow（frostBinder）× freeze（frostBinder）
+#   三种持续效果：burn / poison（emberPriest、plagueAlchemist、emberOath）× regen（fieldMedic、gravePact）
+#   主动 / 被动：主动 6 张；被动 5 张（含 priority、condition 的 cmp / all / any / not、everyN、multicast）
+#   光环：apply + mul + condition（plagueAlchemist）× 只 apply（frostBinder）× 纯光环技能（frostAura）
+#   技能：5 条带 trigger（battle_start ×2 / after_action ×1 / on_player_damaged ×1 / on_shield_broken ×1）+ 1 条纯光环
+#   技能品阶（`rarity`，**必填**、与卡牌同一张表）：bronze（echoBreak）· silver（frostAura、gravePact）·
+#     gold（emberOath）· diamond（warDrums）· **自定义 `mythic`（secondWind）** —— 只影响表现层，不参与战斗计算
+#   ⭐ **时机词广播（已广播 15 / 17）**：battle_start（emberOath、secondWind）· after_action（warDrums）·
+#      on_player_damaged（gravePact、bastionSmith#3、fieldMedic#1、ironWall#3）· on_player_healed（echoProbe#1）·
+#      on_shield_gained（echoProbe#2）· on_shield_broken（**echoBreak**）·
+#      on_card_destroyed / on_card_repaired / on_card_frozen / on_card_hasted / on_card_slowed /
+#      on_card_charged（**echoNode#1–#6**）·
+#      on_burn_tick / on_poison_tick / on_regen_tick（**echoNode#8–#10**，条件限定本方跳变）
+#      —— `on_shield_broken` 用**技能**探针、其余八个词用**B 方卡探针**：两者都不能被 `destroy` 打掉
+#   选择器：self · own_player · enemy_player · all_own_cards · all_enemy_cards · random_enemy_card · adjacent_to_self
+#   条件表达式：{ ref } · { var } · { count } · { add } · { mul } · { div } · { sub }
+#   其它：tags / hiddenTags · 品阶 `frame`（**卡框只由品阶决定**，素材 `images/frames/<frame>/{card_frame,skill_frame}.png`）· `stats.value` · 纯被动卡（cooldown: -1）· inheritOverride
+#   ⭐ 附魔（v2.13 起）：`emberWolf` 带**目录**两件（obsidian = 纯光环 / emerald = stats + actions）；
+#      **卡面不写 `enchant`**（运行期状态，由 `do: enchant` 施加）。引擎侧结算（附加组 / stats 并入 / 光环来源）
+#      尚未实现 ⇒ 目前只覆盖"读取 + 校验 + 回显"。
+#   ⚠️ 不覆盖（故意）：17 个时机词里**引擎未广播的 2 个**（写了只 warn：`before_action` + `battle_end`）·
+#      **光环给玩家施加 DOT**（会触发 `aura.dot_warning`，属暂定告警路径，留作单独用例）
+# ============================================================
+
+id: test                 # 必须与目录名逐字一致
+name: 测试卡包
+version: 1
+description: 内置机制覆盖包：每种原语 / 状态 / 光环 / 技能形态各至少一张，数值均为占位
+
+builtin: true            # 随程序分发的内置包（用户故事 1 的"内置基础卡包"）
+owner: common            # 本包卡牌的默认归属 = 普通池（卡面不写 owner 时由加载期补齐，不会产生 note）
+
+engineRange:             # 兼容的引擎版本区间（缺省左闭右开；版本号写全三段并加引号）
+  - from: '0.0.0'
+
+rarities:
+  source: file           # 本包的品阶表在同目录 rarities.yml（含一个自定义品阶，演示"表现层资源"）
+
+cards:                   # 卡牌清单：裸文件名 = cards/<id>.yml = 卡内的 id
+  - emberWolf            # 小 · 青铜 · 主动伤害 + 品质继承覆盖
+  - ashRunner            # 小 · 青铜 · 主动伤害 + 自我加速（haste）
+  - ironWall             # 大 · 白银 · 主动伤害 + everyN 护盾 + 被动治疗
+  - emberPriest          # 中 · 黄金 · multicast 2 + 灼烧 / 剧毒
+  - plagueAlchemist      # 小 · 自定义品阶 · 光环（apply + mul）+ 玩家侧 DOT
+  - frostBinder          # 中 · 白银 · 冰冻 / 减速 + 友方攻击光环
+  - fieldMedic           # 中 · 白银 · 纯被动（cooldown: -1）· 治疗 / 再生 / repair
+  - bastionSmith         # 大 · 钻石 · charge + shield + 被动 destroy
+  - echoProbe            # 小 · 青铜 · 纯被动探针：治疗 / 获盾两词的广播覆盖（动作空转）
+  - echoNode             # 小 · 白银 · 九词探针（卡牌侧六 + 持续效果跳变三；挂 B 方，不会被 destroy 打掉）
+
+skills:                  # 技能与卡牌写在**同一份** pack.yml 里（技能不再单独一份 pack.yml）
+  - emberOath            # battle_start → 给敌方玩家叠灼烧
+  - secondWind           # battle_start → 本方护盾
+  - gravePact            # on_player_damaged + 条件 → 治疗 + 再生
+  - warDrums             # after_action + { count } 条件 → 全体友方加攻
+  - echoBreak            # on_shield_broken 探针（技能不可被 destroy；动作 = charge 0 秒空转）
+  - frostAura            # **纯光环技能**（无 trigger）：削弱敌方攻击
+
+assets: []               # 表现层资源清单；缺省空 = 按文件名约定解析（缺图不阻塞）
+dependencies: []         # 不依赖其它卡包

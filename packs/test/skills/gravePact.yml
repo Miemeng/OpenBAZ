@@ -1,0 +1,32 @@
+# 技能 · 墓约（gravePact）—— 己方受伤且血量偏低时治疗 + 再生
+#
+# 覆盖：技能 `trigger: on_player_damaged` + `condition` · `heal_player` · `gain_stat`（`regen`）·
+#       `heroes` 写**两个**角色 id（技能可被多个英雄学习）
+id: gravePact
+name: 墓约
+version: 1
+rarity: silver           # 技能品阶（必填，与卡牌同口径）；只用于表现层 / 筛选，不参与战斗计算
+priority: 6
+description: 己方玩家血量低于一半时，每次受伤都治疗并叠再生
+
+heroes: [testHeroA, testHeroB]
+
+stats:
+  heal: 18
+  regen: 2
+
+trigger: { event: on_player_damaged }
+
+condition:
+  cmp: lt
+  left: { ref: own_player.hp_pct }
+  right: 0.5
+
+actions:
+  - do: heal_player
+    target: own_player
+    amount: { ref: self.heal }
+  - do: gain_stat
+    stat: regen
+    amount: { ref: self.regen }
+    target: own_player

@@ -1,0 +1,52 @@
+# 壁垒工匠（bastionSmith）· 大 · 钻石 —— `charge` + `shield` + 被动 `destroy`
+#
+# 覆盖：size=large · `charge`（充能：直接把行动条推进，秒数用表达式 `{ div }`）· `shield` ·
+#       被动 `condition` 用 **`any`** + `{ var: player }` + `{ ref: enemy_player }` + `{ count }` ·
+#       **`destroy`**（`random_enemy_card` —— 全仓唯一的随机选择点，也是确定性回归要盯的地方）
+id: bastionSmith
+name: 壁垒工匠
+version: 1
+size: large
+cooldown: 4.00
+rarity: diamond
+description: 机制卡：给相邻卡充能、给自己套盾；敌人受伤时有几率直接失效敌方一张卡
+
+stats:
+  atk: 8
+  speed: 1.0
+  cdp: 100.0
+  shield: 25
+  charge: 1.00           # 充能时长（秒）—— 作为 charge 的 seconds 引用
+  value: 20
+
+tags: [construct]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }
+
+  - id: 2
+    kind: active
+    actions:
+      - do: charge
+        target: adjacent_to_self
+        seconds: { div: [{ ref: self.charge }, 2] }   # 充能 = charge ÷ 2（覆盖 `{ div }`）
+      - do: shield
+        target: own_player
+        amount: { ref: self.shield }
+
+  - id: 3
+    kind: passive
+    priority: 4          # 低于 fieldMedic 的 8：用来验证"数值大者优先"
+    trigger: { event: on_player_damaged }
+    condition:
+      any:
+        - { cmp: eq, left: { var: player }, right: { ref: enemy_player } }
+        - { cmp: gt, left: { count: all_enemy_cards }, right: 1 }
+    actions:
+      - do: destroy
+        target: random_enemy_card   # 随机点：rng 消耗顺序进确定性 hash，改动选择器要重冻基准

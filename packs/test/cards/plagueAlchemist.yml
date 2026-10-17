@@ -1,0 +1,47 @@
+# 疫病术士（plagueAlchemist）· 小 · **自定义品阶 mythic** —— 光环（apply + mul + condition）
+#
+# 覆盖：**自定义品阶**（`rarities.yml` 登记的 `mythic`，演示"自定义品阶 / 卡框是表现层资源"）·
+#       光环 `apply` + `mul` 同时生效（先平铺、后乘倍率）· 光环 `condition` 用 `{ count }` ·
+#       表达式 `{ sub }` · 主动 `gain_stat` 给敌方玩家叠灼烧
+id: plagueAlchemist
+name: 疫病术士
+version: 1
+size: small
+cooldown: 3.00
+rarity: mythic           # ✅ **自定义品阶**（本包 rarities.yml 登记；**不在 upgrade 链上**）
+                         #    可正常引用： = A（"已注册"按**已登记集合**判，
+                         #    `inheritOverride` 的分段才用链）
+description: 机制卡：给全体友方加攻（光环），并给敌方玩家叠灼烧
+
+stats:
+  atk: 10
+  speed: 1.0
+  cdp: 100.0
+  burn: 2
+  value: 40
+
+tags: [human, poison]
+
+# 光环：来源在场期间的**只读数值修饰**（不落状态、无层数、无时长；来源离场下一帧失效）
+aura:
+  select: all_own_cards          # 选择器与 effect 的 target 同一套语法
+  apply:
+    - { stat: atk, amount: 3 }   # 平铺：+3
+  mul:
+    - { stat: atk, factor: 1.20 }  # 倍率：×1.2（倍率之间加算）
+  condition:                     # 为假 ⇒ 本帧贡献 0（不是"移除"）
+    cmp: gt
+    left: { count: all_own_cards }   # `{ count }` 只数卡牌（玩家不参与计数）
+    right: 0
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { sub: [{ ref: self.atk }, 2] }   # 占位表达式：只为覆盖 `{ sub }`，数值无意义
+      - do: gain_stat
+        stat: burn
+        amount: { ref: self.burn }
+        target: enemy_player

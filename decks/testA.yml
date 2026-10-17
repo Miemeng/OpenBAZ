@@ -1,0 +1,29 @@
+# 测试阵容·甲（decks/testA.yml）—— 供 `--deckA` 使用
+#
+# 格式见 / [decks/example.yml](example.yml)；口径见。
+# 本阵容刻意带上 `hp` / `maxHp`：覆盖**血量三级优先级的第 ① 级**（阵容覆盖 > 角色 > INITIAL_HP）。
+#
+# 用法：node simulator/run.ts --deckA decks/testA.yml --deckB decks/testB.yml --seed 42
+
+name: 测试阵容·甲
+hero: testHeroA          # 必填：角色 id（须已注册；血量默认取它的 initHp / initMaxHp）
+
+hp: 320                  # 覆盖角色血量（模拟模式 / 调试专供）
+maxHp: 350               # 覆盖血量上限
+
+cards:                   # 必填：场上卡牌（只引用已注册 id）；slot = 左端格号（1 基，1–10）
+  - id: emberWolf        # small → 占 1 格
+    slot: 1
+  - id: ashRunner        # small → 占 1 格
+    slot: 2
+  - id: echoProbe        # small → 占 1 格；三个时机词的广播探针（动作空转，见卡文件头）
+    slot: 3
+  - id: ironWall         # large → 占 3 格（4–6）
+    slot: 4
+  - id: emberPriest      # medium → 占 2 格（8–9）
+    slot: 8
+
+skills:                  # 该玩家携带的技能（注册 id 列表）
+  - emberOath
+  - secondWind
+  - echoBreak            # on_shield_broken 探针（技能不会被 destroy，用来观察 A 方护盾被击穿）

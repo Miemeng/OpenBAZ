@@ -1,17 +1,17 @@
-// 战场与摆盘（规则说明书 §2、框架设计 §4.3）
-//
+// 战场与摆盘
+
 // 已定规则（不得自行改动）：
 // - 双方**各一行 10 格**；"相邻" = 同侧格子索引相邻（无行列几何问题）
 // - 卡牌占位按 size 推导：small 1 格 / medium 2 格 / large 3 格，可被卡面 `slots` 覆盖
 // - 摆盘合法性：目标**连续**格全部为空且不越界；模拟模式只校验几何，不校验强度
 // - 同名卡允许多张，生成不同 instanceId
-//
+
 // 因此"位置"是卡牌的**一等字段**：不仅用于渲染（哪一格放哪张卡），
 // 也用于行动顺序（同优先级下按加载顺序，而加载顺序 = 先本方后敌方、各自从左到右）
 // 与将来的相邻类选择器（adjacent_to_self / adjacent_left_self / adjacent_right_self）。
 import type { BoardCard, Card, CardSize, PlayerId } from './types.ts'
 
-/** 每行格子数（规则 §2：双方各一行 10 格） */
+/** 每行格子数 */
 export const ROW_SLOTS = 10
 
 /** size → 占格数（可被卡面 `slots` 覆盖） */
@@ -41,7 +41,7 @@ export function slotsOfBoardCard(boardCard: BoardCard): number {
   return slotsForCard(boardCard.card)
 }
 
-/** 摆盘校验错误码（与 API文档.md §7 的 E_SLOT / E_CARD_REF 对齐） */
+/** 摆盘校验错误码 */
 export type BoardErrorCode = 'E_SLOT' | 'E_CARD_REF'
 
 export interface BoardError {
@@ -57,13 +57,20 @@ export interface Placement {
   readonly card: Card
   /** 左端所在格，1–10 */
   readonly slot: number
+  /**
+   * 开局时这张卡的**当前生效附魔 id**（选填；C4e / 《审阅.md》§AE = A）。
+   *
+   * 这是**玩家配装**带来的"出厂自带"（局外养成）—— 卡牌文件里**仍然禁止**写 `enchant`（AD.6 = B）。
+   * 合法性由阵容校验负责（`cards/deck.ts`：该卡 `enchantments` 目录里必须有这个 id）。
+   */
+  readonly enchant?: string
 }
 
 /**
  * 校验单方摆盘。返回**全部**错误（不是遇到第一个就停），便于 CLI 一次性报告。
  *
  * 校验项：格号越界 / 占格越界 / 格子重叠。
- * 引用完整性（卡牌 id 是否已注册）不在本函数职责内——它需要注册表，见 API文档.md §2.3。
+ * 引用完整性（卡牌 id 是否已注册）不在本函数职责内——它需要注册表，见 。
  */
 export function validatePlacements(side: PlayerId, placements: readonly Placement[]): BoardError[] {
   const errors: BoardError[] = []
@@ -114,7 +121,7 @@ export function validatePlacements(side: PlayerId, placements: readonly Placemen
 /**
  * 把摆盘转成按"加载顺序"排好的场上卡牌列表。
  *
- * 加载顺序（规则 §6.2 第 2 条）：战斗开始时，**先本方后敌方、各自从左到右**。
+ * 加载顺序：战斗开始时，**先本方后敌方、各自从左到右**。
  * 这里只处理**单方**：按 slot 升序即为该方的加载顺序；跨方的先后由战斗状态里的
  * `loadOrder` 全局序号保证（见 state.ts）。同名卡按传入顺序区分 instanceId。
  *
@@ -136,6 +143,7 @@ export function buildBoardCards(side: PlayerId, placements: readonly Placement[]
     destroyed: false,
     stats: [],
     statuses: [],
+    ...(placement.enchant === undefined ? {} : { enchant: placement.enchant }),
   }))
 }
 

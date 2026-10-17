@@ -1,0 +1,40 @@
+# 品阶与卡牌价值 —— 基础规则表（packs/base/rarities.yml）
+#
+# 口径来源： ``：
+#   ① **价值挂在品阶上**：卡牌价值不再是独立的 `card_values.yml`，而是**品阶表的一项**；
+#   ② 本表是**基础规则**（放 `packs/base`），`core` 包只用来临时调数值；
+#   ③ **引擎内置一份兜底**（bronze 1 / silver 3 / gold 8 / diamond 20）：品阶没写 `value` 时用它，
+#      防止本包被改动 / 缺失后经济崩掉；
+#   ④ `prize`（当前售价）**不写 ⇒ 等于该品阶的 `value`**；写了则覆盖；模拟模式战斗内不变价；
+#   ⑤ **卡面 `stats.value` 缺省时按当前品阶的 `value` 初始化**。
+
+rarities:
+  - id: bronze
+    name: 青铜
+    color: "#8d6e63"
+    value: 1              # 基础价值（可省略 ⇒ 取引擎内置兜底 1）
+    # prize: 1            # 当前售价；不写 = value
+  - id: silver
+    name: 白银
+    color: "#b0bec5"
+    value: 3
+  - id: gold
+    name: 黄金
+    color: "#ffc107"
+    value: 8
+  - id: diamond
+    name: 钻石
+    color: "#00e5ff"
+    frame: diamond  # 示例：钻石品阶的卡框 / 技能框文件夹 = images/frames/diamond/
+    value: 20
+
+# 二合一合成链，按升序书写。
+# ⚠️ **链上只允许内置四档**：自定义品阶仍可登记（供卡牌 rarity 引用），但**不得进入本链**
+#    （校验期 error）。合成机制落地前先把链路维持稳定。
+upgrade: [bronze, silver, gold, diamond]
+
+# ============================================================
+# 版本记录
+# （2026-10-05）：首版。按  `` 增补 `value` / `prize`
+#   两个字段（价值挂在品阶上）；同时取代仓库根的 `card_values.yml`（该文件本轮删除）。
+# ============================================================

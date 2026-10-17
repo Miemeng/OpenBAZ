@@ -1,0 +1,31 @@
+# 测试阵容·乙（decks/testB.yml）—— 供 `--deckB` 使用
+#
+# 与 testA 的差别是故意的：
+#   ① **不写 `hp` / `maxHp`** ⇒ 覆盖血量三级优先级的**第 ② 级**（角色 `initHp` / `initMaxHp`，
+#      而 testHeroB 是 `initHp: 260 / initMaxHp: 300` 的"开局不满血"角色）；
+#   ② 携带的技能里包含**纯光环技能** `frostAura` 与高频技能 `warDrums`。
+#
+# 用法：node simulator/run.ts --deckA decks/testA.yml --deckB decks/testB.yml --seed 42
+
+name: 测试阵容·乙
+hero: testHeroB
+
+cards:
+  - id: plagueAlchemist  # small → 占 1 格
+    slot: 1
+  - id: frostBinder      # medium → 占 2 格（2–3）
+    slot: 2
+  - id: echoProbe        # small → 占 1 格；三个时机词的广播探针（动作空转，见卡文件头）
+    slot: 4
+  - id: fieldMedic       # medium → 占 2 格（5–6）
+    slot: 5
+  - id: echoNode         # small → 占 1 格；六个卡牌侧时机词的广播探针（被动空转）
+    slot: 7              #   同时充当前两者的"相邻目标"：bastionSmith 的 charge 与 fieldMedic 的 repair
+  - id: bastionSmith     # large → 占 3 格（8–10）
+    slot: 8
+
+skills:
+  - gravePact
+  - warDrums
+  - frostAura
+  - echoBreak            # on_shield_broken 探针（技能不会被 destroy）；**追加在末尾**以免改动既有技能的加载序

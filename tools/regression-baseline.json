@@ -1,0 +1,97 @@
+{
+  "note": "确定性回归基准 —— 由 `node tools/regression-check.mjs --update` 生成。口径有意变更后才能重跑 --update，并须在登记。",
+  "packageVersion": "0.0.0",
+  "scenarios": {
+    "tutorial-deck-seed42": {
+      "args": [
+        "simulator/run.ts",
+        "--pack",
+        "tutorial/templates/packs",
+        "--deckA",
+        "decks/example.yml",
+        "--deckB",
+        "decks/example.yml",
+        "--seed",
+        "42"
+      ],
+      "sha256": "400cd513db7c095b026c993e8eed616563461810fbf86ea2f77eebab9dea9bd1",
+      "summary": {
+        "result": "=== 结果：玩家B 获胜（血量归零）===",
+        "time": "=== 用时：触发帧=725 全局帧=14500（145.00s）===",
+        "final": "=== 终局血量：玩家A 0　玩家B 10 ==="
+      }
+    },
+    "tutorial-deck-seed1": {
+      "args": [
+        "simulator/run.ts",
+        "--pack",
+        "tutorial/templates/packs",
+        "--deckA",
+        "decks/example.yml",
+        "--deckB",
+        "decks/example.yml",
+        "--seed",
+        "1"
+      ],
+      "sha256": "5c573787fe6aae664626a1bedbda137518efaaeb2a90ad48ae6eeec0db5dd9eb",
+      "summary": {
+        "result": "=== 结果：玩家B 获胜（血量归零）===",
+        "time": "=== 用时：触发帧=725 全局帧=14500（145.00s）===",
+        "final": "=== 终局血量：玩家A 0　玩家B 10 ==="
+      }
+    },
+    "tutorial-deck-seed20261005": {
+      "args": [
+        "simulator/run.ts",
+        "--pack",
+        "tutorial/templates/packs",
+        "--deckA",
+        "decks/example.yml",
+        "--deckB",
+        "decks/example.yml",
+        "--seed",
+        "20261005"
+      ],
+      "sha256": "332f78d882a0b47254f6a1f6350621eb303a02a402e9dad32b54b8899290b730",
+      "summary": {
+        "result": "=== 结果：玩家B 获胜（血量归零）===",
+        "time": "=== 用时：触发帧=725 全局帧=14500（145.00s）===",
+        "final": "=== 终局血量：玩家A 0　玩家B 10 ==="
+      }
+    },
+    "test-deck-seed42": {
+      "args": [
+        "simulator/run.ts",
+        "--deckA",
+        "decks/testA.yml",
+        "--deckB",
+        "decks/testB.yml",
+        "--seed",
+        "42"
+      ],
+      "sha256": "c15a44e1461387298084d3b2b3f49d33e30e69d6bc9b1f651044d684fed4b8c5",
+      "summary": {
+        "result": "=== 结果：玩家B 获胜（血量归零）===",
+        "time": "=== 用时：触发帧=75 全局帧=1500（15.00s）===",
+        "final": "=== 终局血量：玩家A 0　玩家B 300 ==="
+      }
+    },
+    "test-deck-seed7": {
+      "args": [
+        "simulator/run.ts",
+        "--deckA",
+        "decks/testA.yml",
+        "--deckB",
+        "decks/testB.yml",
+        "--seed",
+        "7"
+      ],
+      "sha256": "4376d3280d2a3cf36c84da7bd4deae0212d9c91ced0a80870b0280a4aee20316",
+      "summary": {
+        "result": "=== 结果：玩家B 获胜（血量归零）===",
+        "time": "=== 用时：触发帧=80 全局帧=1600（16.00s）===",
+        "final": "=== 终局血量：玩家A 0　玩家B 300 ==="
+      }
+    }
+  }
+}

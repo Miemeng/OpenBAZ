@@ -1,0 +1,44 @@
+# 余烬祭司（emberPriest）· 中 · 黄金 —— `multicast` 多重触发 + 两种持续效果
+#
+# 覆盖：size=medium（占 2 格）· `multicast: 2`（行动条充满后连续执行 2 次）·
+#       `gain_stat` 施加 `burn` / `poison` 给**敌方玩家**（DOT 走 `gain_stat`，不是 `apply_status`）·
+#       一条能力里多条动作按书写顺序结算
+id: emberPriest
+name: 余烬祭司
+version: 1
+size: medium
+cooldown: 2.50
+rarity: gold
+description: 机制卡：一次满条连续打两轮，并给敌方玩家叠灼烧与剧毒
+
+stats:
+  atk: 25
+  speed: 1.0
+  cdp: 100.0
+  burn: 3                # 灼烧层数（DoT，按周期跳伤并指数衰减）
+  poison: 4              # 剧毒层数（DoT，无视护盾）
+  value: 8
+
+multicast: 2             # >1 时卡面标注 *N
+
+tags: [human, fire]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }
+
+  - id: 2
+    kind: active
+    actions:
+      - do: gain_stat
+        stat: burn
+        amount: { ref: self.burn }
+        target: enemy_player
+      - do: gain_stat
+        stat: poison
+        amount: { ref: self.poison }
+        target: enemy_player

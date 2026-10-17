@@ -1,0 +1,32 @@
+# 技能 · 战鼓（warDrums）—— 任意卡牌行动后给全体友方卡牌加攻
+#
+# 覆盖：技能 `trigger: after_action`（已广播的第三个时机词）· `condition` 用 `{ count }` ·
+#       `gain_stat` 多目标（`all_own_cards`，每个目标各吃全额）· `stackLimit` 声明（引擎尚未按它截断）
+#       · **技能品阶 `rarity`**（与卡牌同一张 `rarities.yml`；本包自定义品阶 `mythic` 也能用）
+# ⚠️ 这条技能会**非常频繁**地触发（每张卡每次行动都算一次），是刻意为之：
+#    用来观察"同一触发帧内同一条技能至多结算一次"与日志量。
+id: warDrums
+name: 战鼓
+version: 1
+rarity: diamond          # 技能品阶：只是声明（表现层取技能框素材 / 筛选用），不参与战斗计算
+priority: 4
+description: 有敌方卡牌在场时，每次行动后给全体友方卡牌 +4 攻击（最多叠 5 层）
+
+heroes: [common]
+
+stats:
+  atk: 4
+
+trigger: { event: after_action }
+
+condition:
+  cmp: gt
+  left: { count: all_enemy_cards }
+  right: 0
+
+actions:
+  - do: gain_stat
+    stat: atk
+    amount: { ref: self.atk }
+    stackLimit: 5        # 层数上限（写入 StatModifier；截断逻辑尚未实现）
+    target: all_own_cards
