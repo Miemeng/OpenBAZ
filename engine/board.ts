@@ -64,6 +64,13 @@ export interface Placement {
    * 合法性由阵容校验负责（`cards/deck.ts`：该卡 `enchantments` 目录里必须有这个 id）。
    */
   readonly enchant?: string
+  /**
+   * **阵容覆盖的数值**（`decks/*.yml` 的 `cards[].stats`，C5）—— 覆盖卡面同名字段。
+   *
+   * 合法性（`speed` / `cdp` 禁写）由 `cards/deck.ts` 的 `validateDeck` 负责；
+   * 装配时原样搬进 `BoardCard.statOverrides`，由 `effectiveStat` 的卡面基础层读取。
+   */
+  readonly stats?: Readonly<Record<string, number>>
 }
 
 /**
@@ -144,6 +151,7 @@ export function buildBoardCards(side: PlayerId, placements: readonly Placement[]
     stats: [],
     statuses: [],
     ...(placement.enchant === undefined ? {} : { enchant: placement.enchant }),
+    ...(placement.stats === undefined ? {} : { statOverrides: placement.stats }),
   }))
 }
 

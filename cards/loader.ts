@@ -49,6 +49,7 @@ import type {
   ValidationError,
 } from './types.ts'
 import type { SourcePosition } from './yaml-positions.ts'
+import { resolveText } from './text.ts'
 
 /** 仓库内的默认数据根（单一数据根 = `packs/`）。 */
 export const PACKS_ROOT = 'packs'
@@ -61,6 +62,8 @@ interface LoadScope {
   readonly heroIds: ReadonlySet<string>
   readonly cardIds: Set<string>
   readonly skillIds: Set<string>
+  /** 目标语言（只影响 `name` / `description` 的内联多语言解析；缺省 = `DEFAULT_LOCALE`）。 */
+  readonly locale?: string
 }
 
 interface PackLoadOutcome {
@@ -210,7 +213,10 @@ function loadCardFile(
   }
   scope.cardIds.add(parsed.data.id)
 
-  return mapCard(parsed.data, packOwner === undefined ? {} : { packOwner })
+  return mapCard(parsed.data, {
+    ...(packOwner === undefined ? {} : { packOwner }),
+    ...(scope.locale === undefined ? {} : { locale: scope.locale }),
+  })
 }
 
 function loadSkillFile(
@@ -253,7 +259,7 @@ function loadSkillFile(
   }
   scope.skillIds.add(parsed.data.id)
 
-  return mapSkill(parsed.data)
+  return mapSkill(parsed.data, scope.locale)
 }
 
 /**
@@ -262,7 +268,12 @@ function loadSkillFile(
  * 本轮**英雄只落数据、不参与注册**（`CardRegistry` 只管卡牌与技能），所以这里的错误
  * 只报告、**不阻断整包**：即使某个英雄文件坏掉，该包的卡牌与技能照常加载。
  */
-function loadHeroFiles(packDir: string, packId: string, errors: ValidationError[]): readonly HeroDef[] {
+function loadHeroFiles(
+  packDir: string,
+  packId: string,
+  errors: ValidationError[],
+  locale?: string,
+): readonly HeroDef[] {
   const heroes: HeroDef[] = []
   for (const heroId of listSubdirectories(join(packDir, 'heroes'))) {
     const pathBase = join(packDir, 'heroes', heroId, heroId)
@@ -305,7 +316,7 @@ function loadHeroFiles(packDir: string, packId: string, errors: ValidationError[
       continue
     }
     if (semantic.some(isFatal)) continue
-    heroes.push(mapHero(parsed.data))
+    heroes.push(mapHero(parsed.data, locale))
   }
   return heroes
 }
@@ -318,6 +329,7 @@ function loadHeroFiles(packDir: string, packId: string, errors: ValidationError[
 function loadRarities(
   packDir: string,
   errors: ValidationError[],
+  locale?: string,
 ): { readonly value: LoadedRarities; readonly chain: readonly string[] } | undefined {
   const pathBase = join(packDir, 'rarities')
   const found = readFirst(pathBase)
@@ -344,7 +356,7 @@ function loadRarities(
   const semantic = validateRaritiesFile(parsed.data, ctx)
   errors.push(...semantic)
   if (semantic.some(isFatal)) return undefined
-  const items = parsed.data.rarities.map((rarity) => mapRarity(rarity))
+  const items = parsed.data.rarities.map((rarity) => mapRarity(rarity, locale))
   // （ ``）：**合成链暂时只允许内置四档**
   // 自定义品阶不再自动接在内置链之后（旧口径 `[...BUILTIN_UPGRADE_CHAIN, ...extras]` 作废），
   // 链上出现自定义品阶由 `validateRaritiesFile` 报 `error`。包内自定义品阶本身仍可登记（供 `rarity` 引用）。
@@ -400,7 +412,7 @@ function loadOnePack(packDir: string, packId: string, scope: LoadScope): PackLoa
   let registeredRarities: readonly string[] = BUILTIN_RARITY_IDS
   let rarityChain: readonly string[] = BUILTIN_UPGRADE_CHAIN
   if (dto.rarities?.source === 'file') {
-    const loaded = loadRarities(packDir, errors)
+    const loaded = loadRarities(packDir, errors, scope.locale)
     if (loaded === undefined) return { errors }
     rarities = loaded.value
     rarityChain = loaded.chain
@@ -451,7 +463,7 @@ function loadOnePack(packDir: string, packId: string, scope: LoadScope): PackLoa
   }
 
   // ——— 英雄（只落数据）与依赖提示 —
-  const heroes = loadHeroFiles(packDir, packId, errors)
+  const heroes = loadHeroFiles(packDir, packId, errors, scope.locale)
   if (dto.dependencies !== undefined && dto.dependencies.length > 0) {
     errors.push(
       problem(
@@ -466,7 +478,7 @@ function loadOnePack(packDir: string, packId: string, scope: LoadScope): PackLoa
 
   const pack: Mutable<LoadedPack> = {
     packId: dto.id,
-    name: dto.name,
+    name: resolveText(dto.name, scope.locale),
     version: dto.version,
     builtin: dto.builtin ?? false,
     cards,
@@ -489,7 +501,7 @@ function loadOnePack(packDir: string, packId: string, scope: LoadScope): PackLoa
  *
  * 目录不存在 / 不是目录：返回**空包表 + 一条 `pack.manifest` 错误**（不抛错）。
  */
-export function loadPacks(root: string): LoadResult {
+export function loadPacks(root: string, options: LoadPacksOptions = {}): LoadResult {
   const packs: LoadedPack[] = []
   const errors: ValidationError[] = []
 
@@ -507,6 +519,7 @@ export function loadPacks(root: string): LoadResult {
     heroIds: collectHeroIds(root),
     cardIds: new Set<string>(),
     skillIds: new Set<string>(),
+    ...(options.locale === undefined ? {} : { locale: options.locale }),
   }
   for (const packId of listSubdirectories(root)) {
     const outcome = loadOnePack(join(root, packId), packId, scope)
@@ -516,9 +529,15 @@ export function loadPacks(root: string): LoadResult {
   return { packs, errors }
 }
 
+/** `loadPacks` 的可选项。 */
+export interface LoadPacksOptions {
+  /** 目标语言（缺省 `DEFAULT_LOCALE` = `zh-CN`）：只影响数据文案（`name` / `description`）的解析。 */
+  readonly locale?: string
+}
+
 /** 宿主适配层的接口形态（浏览器宿主将来提供另一实现）。 */
 export interface PackSource {
-  readonly loadPacks: (root: string) => LoadResult
+  readonly loadPacks: (root: string, options?: LoadPacksOptions) => LoadResult
 }
 
 /** Node 宿主的唯一落点。 */

@@ -13,7 +13,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { CardRegistry } from '../cards/registry.ts'
 import type { LoadResult, ValidationError } from '../cards/types.ts'
 import { ENGINE_VERSION } from '../engine/version.ts'
-import { packSource } from './data/packSource.ts'
+import { isDesktopHost, packSource } from './data/packSource.ts'
+import { t } from './i18n/index.ts'
 import { CardLibrary } from './modes/simulate/CardLibrary.tsx'
 import { SimulateMode } from './modes/simulate/SimulateMode.tsx'
 import { buildRows } from './state/cardLibrary.ts'
@@ -62,11 +63,12 @@ export function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
-          <h1>大巴扎模拟器</h1>
-          <p className="subtitle">
-            客户端 · S5 逐帧回放（引擎 <code>{ENGINE_VERSION}</code>）
-          </p>
+        <div className="brand">
+          <img className="brand-mark" src="./logo-mark.svg" alt="" width={26} height={37} />
+          <div>
+            <h1>{t('app.title')}</h1>
+            <p className="subtitle">{t('app.subtitle', { version: ENGINE_VERSION })}</p>
+          </div>
         </div>
         <div className="topbar-actions">
           <nav className="tabs">
@@ -77,7 +79,7 @@ export function App() {
                 setTab('library')
               }}
             >
-              卡牌库
+              {t('app.tabLibrary')}
             </button>
             <button
               type="button"
@@ -86,7 +88,7 @@ export function App() {
                 setTab('board')
               }}
             >
-              摆盘
+              {t('app.tabBoard')}
             </button>
           </nav>
           <button
@@ -97,16 +99,19 @@ export function App() {
             }}
             disabled={state.status === 'loading'}
           >
-            {state.status === 'loading' ? '加载中…' : '重载卡牌'}
+            {state.status === 'loading' ? t('app.reloading') : t('app.reload')}
           </button>
         </div>
       </header>
 
       {state.status === 'ready' && (
         <p className="summary">
-          卡包 {String(state.result.packs.length)} 个 · 卡牌 {String(rows.length)} 张 · 技能{' '}
-          {String(state.result.packs.reduce((sum, pack) => sum + pack.skills.length, 0))} 个 · 问题{' '}
-          {String(errors.length)} 条
+          {t('app.summary', {
+            packs: state.result.packs.length,
+            cards: rows.length,
+            skills: state.result.packs.reduce((sum, pack) => sum + pack.skills.length, 0),
+            issues: errors.length,
+          })}
         </p>
       )}
 
@@ -118,11 +123,14 @@ export function App() {
         </ul>
       )}
 
-      {state.status === 'loading' && <p className="hint">正在加载卡牌数据…</p>}
+      {/* 桌面版首次启动只有 `packs/base`（它没有卡）⇒ 空列表时明确告诉玩家把包放哪儿 */}
+      {state.status === 'ready' && isDesktopHost && rows.length === 0 && (
+        <p className="hint no-cards">{t('app.noCards', { path: '%APPDATA%\\OpenBaz\\packs' })}</p>
+      )}
+
+      {state.status === 'loading' && <p className="hint">{t('app.loadingHint')}</p>}
       {state.status === 'failed' && (
-        <p className="failure">
-          取数失败：{state.message}（检查 `npm run dev` 是否在跑、或 `npm run packs:manifest` 是否生成过清单）
-        </p>
+        <p className="failure">{t('app.loadError', { detail: state.message })}</p>
       )}
 
       {state.status === 'ready' && tab === 'library' && (

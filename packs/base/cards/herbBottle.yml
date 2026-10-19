@@ -1,0 +1,23 @@
+# 草药瓶（herbBottle）· 中 · 白银 —— 只有一条主动：治疗
+#
+# 教学点：`heal_player` +「把数值写在 stats 里、动作里引用」的写法。
+id: herbBottle
+name: 草药瓶
+version: 2
+size: medium
+cooldown: 3.50
+rarity: silver
+description: 行动条满时给友方玩家回复「治疗」点生命。
+
+stats:
+  heal: 20
+
+tags: [supply]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: heal_player
+        target: own_player
+        amount: { ref: self.heal }

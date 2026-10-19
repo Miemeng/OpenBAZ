@@ -15,6 +15,7 @@ import { MAX_TIME_SECONDS } from '../../../engine/state.ts'
 import { runBattle } from '../../../engine/tick.ts'
 import type { BattleOptions, Card, FrameCard, FrameSnapshot, PlayerId } from '../../../engine/types.ts'
 import { CardDetail } from '../../components/CardDetail.tsx'
+import { EmptyState } from '../../components/EmptyState.tsx'
 import {
   DETAIL_WINDOW_HEIGHT,
   DETAIL_WINDOW_WIDTH,
@@ -24,6 +25,8 @@ import {
   type Size,
 } from '../../state/cardDetail.ts'
 import { CardDetailContext, type CardDetailApi } from '../../state/cardDetailContext.ts'
+import { arrowToTri } from '../../state/effectLine.ts'
+import { t } from '../../i18n/index.ts'
 import {
   advanceReplay,
   frameFraction,
@@ -79,6 +82,8 @@ interface DetailTarget {
   readonly top: number
   readonly pinned: boolean
   readonly frozen: CardDetailView | null
+  /** 编辑态的当前附魔 id（回放态为空 —— 那种情况由 `FrameCard.enchant` 给） */
+  readonly enchantId?: string
 }
 
 interface SimulateModeProps {
@@ -117,7 +122,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
 
   /** 组装视图：**四区口径全在 `state/cardDetail.ts`**，这里只负责取数据（品阶名 / 归属 / 效果回显） */
   const detailViewOf = useCallback(
-    (card: Card, frame: FrameCard | undefined): CardDetailView => {
+    (card: Card, frame: FrameCard | undefined, enchantId?: string): CardDetailView => {
       const look = rarityOf(rarityTable, card.rarity)
       const ownerId = card.owner
       const ownerLabel =
@@ -129,9 +134,13 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
       return buildCardDetail({
         card,
         frame,
+        // 编辑态没有帧快照 ⇒ 附魔 id 由调用方（`BoardRow` 的悬停）带过来
+        ...(enchantId === undefined ? {} : { enchantId }),
         // 回放态沿用 `replay.ts` 的口径（冰冻向前借周期）；编辑态交给数据层让引擎算基础周期
         gauge: frame === undefined ? undefined : gaugeViewOf(frames, replay.index, frame),
         effectLines: registry.summary(card.id),
+        // 结构化行 ⇒ 效果区按 `kind` 分组，不再靠中文前缀（AG.6 = A）
+        effects: registry.summaryLines(card.id),
         rarityName: look.name,
         rarityColor: look.color,
         ownerLabel,
@@ -142,7 +151,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
 
   const detailApi = useMemo<CardDetailApi>(
     () => ({
-      enter(card, frame, pointer) {
+      enter(card, frame, pointer, enchantId) {
         if (pinnedRef.current) return // 已钉住 ⇒ 内容冻结（§W.3），悬停不改
         if (hoverTimer.current !== null) window.clearTimeout(hoverTimer.current)
         hoverTimer.current = window.setTimeout(() => {
@@ -150,6 +159,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
           setDetail({
             card,
             instanceId: frame === undefined ? null : frame.instanceId,
+            ...(enchantId === undefined ? {} : { enchantId }),
             ...placeDetail(pointer, viewportSize(), WINDOW_SIZE),
             pinned: false,
             frozen: null,
@@ -164,7 +174,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
         if (pinnedRef.current) return
         setDetail(null)
       },
-      togglePin(card, frame, pointer) {
+      togglePin(card, frame, pointer, enchantId) {
         if (pinnedRef.current) {
           pinnedRef.current = false
           setDetail(null)
@@ -177,7 +187,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
           ...placeDetail(pointer, viewportSize(), WINDOW_SIZE),
           pinned: true,
           // **钉住即冻结**：内容取钉住那一刻的帧（§W.3），之后回放继续走也不刷新
-          frozen: detailViewOf(card, frame),
+          frozen: detailViewOf(card, frame, enchantId),
         })
       },
     }),
@@ -202,7 +212,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
   const detailNode =
     detail === null ? null : (
       <CardDetail
-        view={detail.frozen ?? detailViewOf(detail.card, currentFrameCard(detail.instanceId))}
+        view={detail.frozen ?? detailViewOf(detail.card, currentFrameCard(detail.instanceId), detail.enchantId)}
         left={detail.left}
         top={detail.top}
         pinned={detail.pinned}
@@ -290,7 +300,7 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
     setReplay((state) => setSpeedReplay(state, speed))
   }, [])
 
-  /** 键盘：空格 = 播放 / 暂停，← → = 步进（输入框 / 下拉里不抢键） */
+  /** 键盘：空格 = 播放 / 暂停，← → = 逐帧（Shift 加速 ×10），Home / End = 首 / 末帧（输入框 / 下拉里不抢键） */
   useEffect(() => {
     if (phase !== 'replay') return undefined
     const onKey = (event: KeyboardEvent): void => {
@@ -301,17 +311,23 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
         togglePlay()
       } else if (event.key === 'ArrowLeft') {
         event.preventDefault()
-        stepBy(-1)
+        stepBy(event.shiftKey ? -10 : -1)
       } else if (event.key === 'ArrowRight') {
         event.preventDefault()
-        stepBy(1)
+        stepBy(event.shiftKey ? 10 : 1)
+      } else if (event.key === 'Home') {
+        event.preventDefault()
+        seekTo(0)
+      } else if (event.key === 'End') {
+        event.preventDefault()
+        seekTo(total - 1)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => {
       window.removeEventListener('keydown', onKey)
     }
-  }, [phase, togglePlay, stepBy])
+  }, [phase, togglePlay, stepBy, seekTo, total])
 
   /* ---------------- 表现层要的派生数据 ---------------- */
 
@@ -412,70 +428,104 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
 
   /* ---------------- 渲染 ---------------- */
 
-  if (phase === 'replay' && run !== null && sideLooks !== null) {
-    const frame = frames[replay.index]
-    // **补帧系数**：播放中按"帧内余量"插值（画面 60fps 平滑），暂停 / 步进时恒为 0
+  // **回放 / 结算共用一套版面（3.2 步 · F1 = A）**：左边棋盘 + 控制条，右边**固定宽右栏** ——
+  // 回放填"本帧动作日志"、结算填"终局读数 + 完整日志"。左栏（卡源 + 编辑栏）只在摆盘态出现。
+  if ((phase === 'replay' || phase === 'result') && run !== null && sideLooks !== null) {
+    const lastIndex = Math.max(0, frames.length - 1)
+    const index = phase === 'result' ? lastIndex : replay.index
+    const frame = frames[index]
+    // **补帧系数**：播放中按"帧内余量"插值（画面 60fps 平滑），暂停 / 步进 / 结算时恒为 0
     // ⇒ 停在任意帧时画面严格等于 `frames[i]`（逐帧一致仍可验证）。
-    const fraction = replay.playing ? frameFraction(replay) : 0
+    const fraction = phase === 'replay' && replay.playing ? frameFraction(replay) : 0
     return (
       <CardDetailContext.Provider value={detailApi}>
       <section className="replay">
         <header className="replay-head">
           <button type="button" className="replay-back" onClick={backToEdit} title="回到摆盘重新编辑（← 左上角）">
-            ← 回到摆盘
+            {t('replay.back')}
           </button>
-          <h3>回放</h3>
+          <h3>{phase === 'result' ? t('result.title') : t('replay.title')}</h3>
           <span className="hint">
-            种子 <code>{String(run.seed)}</code> · {String(total)} 帧（含开局快照）· 空格播放 / 暂停，← → 逐帧
+            {t('replay.seed')} <code>{String(run.seed)}</code> · {String(total)} {t('replay.seedSuffix')}
           </span>
+          <span className="replay-hint">{t('replay.pinHint')}</span>
         </header>
 
-        <BattleView
-          frames={frames}
-          index={replay.index}
-          fraction={fraction}
-          sides={sideLooks}
-          cardOf={cardOf}
-          rarityColorOf={rarityColorOf}
-          cardArtUrlOf={cardArtUrlOf}
-          frameUrlOf={frameUrlOf}
-          skillIconUrlOf={skillIconUrlOf}
-        />
+        <div className="replay-stage">
+          <div className="replay-main">
+            <BattleView
+              frames={frames}
+              index={index}
+              fraction={fraction}
+              sides={sideLooks}
+              cardOf={cardOf}
+              rarityColorOf={rarityColorOf}
+              cardArtUrlOf={cardArtUrlOf}
+              frameUrlOf={frameUrlOf}
+              skillIconUrlOf={skillIconUrlOf}
+            />
 
-        <ReplayBar
-          index={replay.index}
-          total={total}
-          playing={replay.playing}
-          speed={replay.speed}
-          triggerFrame={frame === undefined ? 0 : frame.triggerFrame}
-          timeCs={frame === undefined ? 0 : frame.timeCs}
-          outcomeNote={outcomeNote}
-          onTogglePlay={togglePlay}
-          onStep={stepBy}
-          onSeek={seekTo}
-          onSpeed={pickSpeed}
-          onExit={showResult}
-        />
+            {phase === 'replay' && (
+              <ReplayBar
+                index={replay.index}
+                total={total}
+                playing={replay.playing}
+                speed={replay.speed}
+                triggerFrame={frame === undefined ? 0 : frame.triggerFrame}
+                timeCs={frame === undefined ? 0 : frame.timeCs}
+                outcomeNote={outcomeNote}
+                onTogglePlay={togglePlay}
+                onStep={stepBy}
+                onSeek={seekTo}
+                onSpeed={pickSpeed}
+                onExit={showResult}
+              />
+            )}
+          </div>
 
-        <section className="replay-log">
-          <header className="replay-log-head">
-            <span className="facet-label">本帧动作日志</span>
-            <span className="hint">
-              触发帧 {String(frame === undefined ? 0 : frame.triggerFrame)} · {String(frameLines.length)} 行
-            </span>
-          </header>
-          {frameLines.length === 0 ? (
-            <p className="hint">这一帧没有结算（只有状态推进）</p>
-          ) : (
-            <div className="run-log">
-              {frameLines.map((line, at) => (
-                <div key={`frame-line-${String(at)}`} className="run-log-line">
-                  {line}
+          <aside className={phase === 'result' ? 'rail rail-result' : 'rail'}>
+            {phase === 'result' && summary !== null ? (
+              <RunResult
+                seed={summary.seed}
+                victory={summary.victory}
+                winnerName={summary.winnerName}
+                players={summary.players}
+                triggerFrame={summary.triggerFrame}
+                timeCs={summary.timeCs}
+                messageCount={summary.messageCount}
+                frameCount={summary.frameCount}
+                lines={summary.lines}
+                onReplay={total > 1 ? openReplay : undefined}
+                onClose={backToEdit}
+              />
+            ) : (
+              <>
+                <div className="rail-head">
+                  <span className="facet-label">{t('replay.logTitle')}</span>
+                  <span className="hint">
+                    {t('replay.logCount', {
+                      frame: frame === undefined ? 0 : frame.triggerFrame,
+                      lines: frameLines.length,
+                    })}
+                  </span>
                 </div>
-              ))}
-            </div>
-          )}
-        </section>
+                <div className="rail-body">
+                  {frameLines.length === 0 ? (
+                    <EmptyState main={t('replay.emptyFrame')} />
+                  ) : (
+                    <div className="run-log run-log-rail">
+                      {frameLines.map((line, at) => (
+                        <div key={`frame-line-${String(at)}`} className="run-log-line">
+                          {arrowToTri(line)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </aside>
+        </div>
       </section>
       {detailNode}
       </CardDetailContext.Provider>
@@ -492,25 +542,6 @@ export function SimulateMode({ draft, onChange, packs, registry }: SimulateModeP
         hasRun={run !== null}
         onStart={startBattle}
       />
-
-      {phase === 'result' && summary !== null && (
-        <RunResult
-          seed={summary.seed}
-          victory={summary.victory}
-          winnerName={summary.winnerName}
-          players={summary.players}
-          triggerFrame={summary.triggerFrame}
-          timeCs={summary.timeCs}
-          messageCount={summary.messageCount}
-          frameCount={summary.frameCount}
-          lines={summary.lines}
-          onReplay={total > 1 ? openReplay : undefined}
-          onClose={() => {
-            setRun(null)
-            setPhase('edit')
-          }}
-        />
-      )}
 
       {detailNode}
     </CardDetailContext.Provider>

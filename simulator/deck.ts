@@ -84,11 +84,12 @@ export function loadDecks(
   roots: readonly string[],
   deckAPath: string,
   deckBPath: string,
+  locale?: string,
 ): LoadedDecks {
   const errors: ValidationError[] = []
   const packs: LoadedPack[] = []
   for (const root of roots) {
-    const result = loadPacks(root)
+    const result = loadPacks(root, locale === undefined ? {} : { locale })
     packs.push(...result.packs)
     errors.push(...result.errors)
   }

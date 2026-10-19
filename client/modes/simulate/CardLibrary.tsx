@@ -7,6 +7,9 @@ import { useMemo, useState } from 'react'
 import type { CardRegistry } from '../../../cards/registry.ts'
 import type { LoadedPack } from '../../../cards/types.ts'
 import { CardImage } from '../../components/CardImage.tsx'
+import { EffectLines } from '../../components/EffectLine.tsx'
+import { EmptyState } from '../../components/EmptyState.tsx'
+import { t } from '../../i18n/index.ts'
 import { buildAssetIndex } from '../../data/assets.ts'
 import { applyFilter, EMPTY_FILTER, facetsOf, toggleValue, type CardRow, type LibraryFilter } from '../../state/cardLibrary.ts'
 
@@ -19,9 +22,15 @@ interface CardLibraryProps {
 
 /** 小工具：卡面的"小 / 中 / 大 + 占格数"（占格数来自引擎契约，不在前端推 size→格数） */
 function sizeLabel(row: CardRow): string {
-  const size = row.card.size === 'small' ? '小' : row.card.size === 'medium' ? '中' : '大'
+  const key =
+    row.card.size === 'small' ? 'card.sizeSmall' : row.card.size === 'medium' ? 'card.sizeMedium' : 'card.sizeLarge'
   const slots = row.card.slots ?? (row.card.size === 'small' ? 1 : row.card.size === 'medium' ? 2 : 3)
-  return `${size}/${String(slots)}格`
+  return `${t(key)}/${String(slots)}格`
+}
+
+/** 卡图类名后缀：按卡面真实比例（小 1:2 / 中 1:1 / 大 3:2）—— 列表缩略与详情大图共用 */
+function artSizeOf(size: CardRow['card']['size']): string {
+  return size === 'small' ? 'small' : size === 'medium' ? 'medium' : 'large'
 }
 
 export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
@@ -39,20 +48,20 @@ export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
         <input
           className="search"
           type="search"
-          placeholder="搜索卡名 / id / 卡包"
+          placeholder={t('library.search')}
           value={filter.query}
           onChange={(event) => {
             setFilter({ ...filter, query: event.target.value })
           }}
         />
         <span className="count">
-          {String(visible.length)} / {String(rows.length)} 张
+          {t('library.count', { visible: visible.length, total: rows.length })}
         </span>
       </header>
 
       <div className="facets">
         <div className="facet-row">
-          <span className="facet-label">品阶</span>
+          <span className="facet-label">{t('library.facetRarity')}</span>
           {facets.rarities.map((rarity) => {
             const active = filter.rarities.includes(rarity.id)
             return (
@@ -73,7 +82,7 @@ export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
 
         {facets.tags.length > 0 && (
           <div className="facet-row">
-            <span className="facet-label">标签</span>
+            <span className="facet-label">{t('library.facetTags')}</span>
             {facets.tags.map((tag) => {
               const active = filter.tags.includes(tag)
               return (
@@ -93,7 +102,7 @@ export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
         )}
 
         <div className="facet-row">
-          <span className="facet-label">卡包</span>
+          <span className="facet-label">{t('library.facetPacks')}</span>
           {facets.packs.map((pack) => {
             const active = filter.packIds.includes(pack.id)
             return (
@@ -111,7 +120,7 @@ export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
           })}
           {(filter.rarities.length > 0 || filter.tags.length > 0 || filter.packIds.length > 0 || filter.query !== '') && (
             <button type="button" className="chip chip-clear" onClick={() => { setFilter(EMPTY_FILTER) }}>
-              清空筛选
+               {t('library.clearFilter')}
             </button>
           )}
         </div>
@@ -129,33 +138,47 @@ export function CardLibrary({ registry, rows, packs }: CardLibraryProps) {
                 }}
               >
                 <i className="bar" style={{ background: row.rarity.color }} />
-                <CardImage url={assets.cardArt(row.card.id)} className="card-thumb" />
+                <CardImage url={assets.cardArt(row.card.id)} className={`card-thumb card-thumb-${artSizeOf(row.card.size)}`} />
                 <span className="card-name">{row.card.name}</span>
                 <span className="card-id">{row.card.id}</span>
                 <span className="card-meta">
-                  {sizeLabel(row)} · atk {String(row.card.stats.atk ?? 0)} · cd {String(row.card.cooldown)}cs
+                  {sizeLabel(row)}
+                  {row.card.stats.atk === undefined ? '' : ` · atk ${String(row.card.stats.atk)}`}
+                  {row.card.cooldown === -1 ? '' : ` · cd ${String(row.card.cooldown)}cs`}
                 </span>
                 <span className="card-pack">{row.packName}</span>
               </button>
             </li>
           ))}
-          {visible.length === 0 && <li className="empty">没有符合条件的卡牌</li>}
+          {visible.length === 0 && (
+            <li>
+              <EmptyState main={t('library.empty')} hint={t('library.emptyHint')} />
+            </li>
+          )}
         </ul>
 
         <aside className="detail">
           {selected === undefined ? (
-            <p className="hint">点左侧任意一张卡，看它的效果回显（与 CLI 的 `sim:validate` 同一套描述）</p>
+            <p className="hint">{t('library.pickHint')}</p>
           ) : (
             <>
               <h3>
                 <i className="dot" style={{ background: selected.rarity.color }} />
                 {selected.card.name}
               </h3>
-              <CardImage url={assets.cardArt(selected.card.id)} className="card-art" />
+              <CardImage
+                url={assets.cardArt(selected.card.id)}
+                className={`card-art card-art-${artSizeOf(selected.card.size)}`}
+              />
               <p className="detail-meta">
-                {selected.rarity.name} · {sizeLabel(selected)} · 版本 v{String(selected.card.version)} · 来源 {selected.packName}
+                {t('library.meta', {
+                  rarity: selected.rarity.name,
+                  size: sizeLabel(selected),
+                  version: selected.card.version,
+                  pack: selected.packName,
+                })}
               </p>
-              <pre className="echo">{registry.summary(selected.card.id).join('\n')}</pre>
+              <EffectLines lines={registry.summaryLines(selected.card.id)} values={selected.card.stats} />
             </>
           )}
         </aside>

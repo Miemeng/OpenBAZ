@@ -125,7 +125,7 @@ function serveDecks(res) {
 
 export function packsApi() {
   return {
-    name: 'bazaarsim:packs-api',
+    name: 'openbaz:packs-api',
     apply: 'serve', // 只在 dev server 生效；构建期走 packs.manifest.json（tools/packs-manifest.mjs）
     configureServer(server) {
       server.middlewares.use('/api', (req, res, next) => {

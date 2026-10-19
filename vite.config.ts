@@ -14,6 +14,9 @@ import { packsApi } from './tools/packs-api.mjs'
 
 export default defineConfig({
   root: 'client',
+  // **相对基址**：产物要被两种宿主加载 —— 浏览器（`/` 下）与 Electron（`file://…/dist/index.html`）。
+  // 绝对路径（`/assets/…`）在 `file://` 下必然 404（§十 坑清单第 1 条，症状 = 白屏）。
+  base: './',
   // `packsApi()` = 开发期卡牌数据中介（`/api/packs`、`/api/packs/<packId>/images/*`）：
   // 它在 Node 侧跑现成的读取层，把 `LoadResult` 原样 JSON 给前端。
   // 构建期这条路不存在，前端改读 `packs.manifest.json`（`npm run packs:manifest` 预生成）。
@@ -26,5 +29,10 @@ export default defineConfig({
   build: {
     outDir: '../dist',
     emptyOutDir: true,
+    // 单屏离线应用：React + zod + js-yaml + 引擎/读取层打进**一个** chunk（约 0.5MB / gzip 约 155KB）。
+    // 桌面版从本地 `file://` 加载 ⇒ 分包没有收益；Vite 默认的 500KB 门槛只会每次构建都刷一条警告。
+    // 这里放到 **800KB**：仍然能拦住"体积真的失控"，又不再为当前这套依赖报警。
+    // 真要做在线版 / 首屏优化时再回头拆包（回放面板懒加载、engine 动态 import）。
+    chunkSizeWarningLimit: 800,
   },
 })

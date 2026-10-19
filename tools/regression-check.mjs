@@ -1,9 +1,13 @@
 // 确定性回归检查
 
 // 解决两个不同的问题，别混为一谈：
-//   ① **自洽性**：同一命令连跑两次，日志文件必须**逐字节一致**；
+//   ① **自洽性**：同一命令连跑两次，**结构化摘要**必须逐字节一致；
 //   ② **回归**：与冻结的基准 hash 比 —— 同一条命令跑两次永远相等，**它抓不到"引擎改了行为"**，
 //      只有基准 hash 变了才说明输出发生了漂移（可能是回退，也可能是有意的口径变更）。
+
+// **判据 = 结构化摘要（AG.5 = B）**：`simulator/run.ts --digest <文件>` 产出的规范 JSON
+// （终局结果 + 完整动作日志 + 消息 code/参数，**不含任何渲染文本**），hash 的是它的字节。
+// 这样换语言 / 改一句译文**不会**让基准变红；文本日志（`--log`）仍照旧产出，但只用于人工排查。
 
 // 用法（在仓库根执行）：
 //   node tools/regression-check.mjs                 # 日常校验：自洽性 + 与基准比对
@@ -14,7 +18,7 @@
 // 三条实现约定（都是踩过的坑换来的）：
 //   1. **不开管道**：子进程用 `stdio: ['ignore','ignore','inherit']`。本仓库的沙箱禁止管道
 //      stdio（Node 的 child_process 默认 pipe 会 EPERM），而且我们本来也不需要 stdout
-//      对局输出经 `simulator/run.ts --log <文件>` 落到 UTF-8 文件，hash 与比对都基于该文件的**字节**。
+//      对局产物经 `simulator/run.ts --digest <文件>`（判据）与 `--log <文件>`（人读）落到 UTF-8 文件。
 //   2. **不比 stdout**：`run.ts` 在写文件后还会打印一句「（全部输出已写入 <路径>，UTF-8）」，
 //      路径里含临时目录名 ⇒ 两次运行的 stdout 必然不同，拿它做 hash 会**假红**。
 //   3. **不写时间戳**：基准文件里没有日期，保证"同一份代码 → 同一份基准文件"（可 diff、可入库）。
@@ -131,7 +135,8 @@ const SCENARIOS = [
 
 const HELP = `用法：node tools/regression-check.mjs [--update] [--only=<场景 id>] [--help]
 
-  （无参数）        跑全部场景：每个场景连跑两次比字节，再与 tools/regression-baseline.json 比 hash；
+  （无参数）        跑全部场景：每个场景连跑两次比**结构化摘要**（逐字节一致），
+                    再与 tools/regression-baseline.json 比 hash；
                     末尾另打一段「跨 seed 日志体比对」（去掉 seed 头行后比，只作信息报告、不判成败）
   --update         重新冻结基准（会先做自洽性检查；不自洽则拒绝写）
   --only=<id>      只跑一个场景，id 取值见 --help 末尾的清单
@@ -142,6 +147,8 @@ const HELP = `用法：node tools/regression-check.mjs [--update] [--only=<场�
 
 /** 每个场景跑两次的目标文件名 */
 const RUN_FILES = ['run1.out.txt', 'run2.out.txt']
+/** 每个场景跑两次的**结构化摘要**文件名（与 `RUN_FILES` 一一对应；判据在这里） */
+const DIGEST_FILES = ['run1.digest.json', 'run2.digest.json']
 
 function sha256(buffer) {
   return createHash('sha256').update(buffer).digest('hex')
@@ -197,37 +204,53 @@ function firstDifference(left, right) {
   return { line: 0, left: '<行数相同但字节不同>', right: '', leftLines: a.length, rightLines: b.length }
 }
 
-/** 跑一次对局，返回 { ok, text, hash }（text = --log 文件的 UTF-8 内容） */
-function runOnce(scenario, outFile) {
-  const result = spawnSync(process.execPath, [...scenario.args, '--log', outFile], {
+/** 跑一次对局，返回 { ok, text, digestText, hash }（hash = **结构化摘要**的 sha256） */
+function runOnce(scenario, outFile, digestFile) {
+  const result = spawnSync(process.execPath, [...scenario.args, '--log', outFile, '--digest', digestFile], {
     cwd: root,
     // 不开管道：见文件头"实现约定 1"
     stdio: ['ignore', 'ignore', 'inherit'],
   })
 
   if (result.error !== undefined) {
-    return { ok: false, text: null, hash: null, reason: `起不来子进程：${result.error.message}` }
+    return { ok: false, text: null, digestText: null, hash: null, reason: `起不来子进程：${result.error.message}` }
   }
-  if (!existsSync(outFile)) {
-    return { ok: false, text: null, hash: null, reason: `没有产出日志文件（退出码 ${result.status}）` }
+  if (!existsSync(digestFile)) {
+    return {
+      ok: false,
+      text: null,
+      digestText: null,
+      hash: null,
+      reason: `没有产出结构化摘要（退出码 ${String(result.status)}）；该版本可能还不支持 --digest`,
+    }
   }
-  const buffer = readFileSync(outFile)
-  return { ok: true, text: buffer.toString('utf8'), hash: sha256(buffer), status: result.status }
+  const digestBuffer = readFileSync(digestFile)
+  const text = existsSync(outFile) ? readFileSync(outFile).toString('utf8') : ''
+  return {
+    ok: true,
+    text,
+    digestText: digestBuffer.toString('utf8'),
+    hash: sha256(digestBuffer),
+    status: result.status,
+  }
 }
 
 /** 跑一个场景：两次运行 + 期望值检查；返回结果对象（不抛错） */
 function checkScenario(scenario, dir) {
   const runs = []
-  for (const name of RUN_FILES) {
+  for (const [index, name] of RUN_FILES.entries()) {
     const outFile = join(dir, name)
-    const run = runOnce(scenario, outFile)
+    const digestFile = join(dir, DIGEST_FILES[index] ?? name)
+    const run = runOnce(scenario, outFile, digestFile)
     runs.push(run)
     if (!run.ok) return { scenario, failure: run.reason, runs }
   }
 
   const [first, second] = runs
-  const diff = first.hash === second.hash ? null : firstDifference(first.text, second.text)
-  const summary = summarize(first.text)
+  // 判据不同时，用**摘要**定位第一处差异（文本日志可能完全一样，那样看不出问题）
+  const diff =
+    first.hash === second.hash ? null : firstDifference(first.digestText ?? '', second.digestText ?? '')
+  const summary = summarize(first.text ?? '')
 
   return { scenario, runs, hash: first.hash, summary, diff }
 }
@@ -279,7 +302,7 @@ function main() {
   }
 
   const packageVersion = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version
-  const workDir = mkdtempSync(join(tmpdir(), 'bazaarsim-regression-'))
+  const workDir = mkdtempSync(join(tmpdir(), 'openbaz-regression-'))
   const results = []
   let failed = false
 

@@ -70,13 +70,16 @@ describe('周期变化时保比例（加速 / 减速）', () => {
     expect(boardCard.gaugeCs).toBe(120)
   })
 
-  it('同类状态刷新时长**不改变周期 ⇒ 不动 gauge**', () => {
+  it('同类状态再施加 ⇒ **时长叠加**（不取 max、不覆盖）；周期与 gauge 不动', () => {
     const { boardCard } = setup(200)
     applyCardStatus(boardCard, 'haste', 200)
     boardCard.gaugeCs = 30
-    applyCardStatus(boardCard, 'haste', 400) // 只是延长
+    applyCardStatus(boardCard, 'haste', 400)
     expect(actionPeriodCs(boardCard)).toBe(100)
     expect(boardCard.gaugeCs).toBe(30)
+    // 只剩一条同类状态，剩余时长 = 200 + 400
+    expect(boardCard.statuses).toHaveLength(1)
+    expect(boardCard.statuses[0]?.remainingCs).toBe(600)
   })
 
   it('1s 下限吃掉加速：周期没变 ⇒ 不缩放', () => {

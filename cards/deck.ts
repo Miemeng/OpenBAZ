@@ -22,8 +22,8 @@
  *
  * RW 的三条裁定：① **`hero` 必填**（后续英雄校验 / 触发器 / 头像加载都要它）；
  * ② **`slot` 必填，缺了报 `error`**；③ **同 id 张数不限**（几何与 10 格是唯二约束）。
- * ⚠️ **卡牌 `stats` 覆盖**
- * 属**后续批次**，本轮**不实现**、也不接受该字段（写了 ⇒ 结构层拒绝）。
+ * ✅ **卡牌 `stats` 覆盖（C5 起实现）**：`cards[].stats` = **覆盖**卡面同名字段（不是增量），
+ * **`speed` / `cdp` 禁写**（写 ⇒ `error`）；叠加次序 = 卡面 → **本覆盖** → 附魔 `stats` → 局内 buff → 光环。
  *
  * 校验与装配**都是纯函数、不抛异常**，与 `cards/schema.ts` 同口径。
  */
@@ -53,6 +53,14 @@ export interface DeckCardDto {
    * 与 `do: enchant` 运行期的"目录里没有就静默跳过"不同。
    */
   readonly enchant?: string | undefined
+  /**
+   * **覆盖**这张卡的卡面数值（选填；C5）。
+   *
+   * 语义 = **覆盖**（不是增量）：`{ atk: 12 }` ⇒ 这张卡的攻击按 12 算，与卡面写的无关。
+   * **`speed` / `cdp` 禁写**（写 ⇒ `error`，`validateDeck` 拦）；其余键按卡牌 `stats` 同一张表。
+   * 叠加次序 = 卡面 → **本覆盖** → 附魔自带 `stats` → 局内 buff → 光环（平铺、再倍率）。
+   */
+  readonly stats?: Readonly<Record<string, number>> | undefined
 }
 
 export interface DeckDto {
@@ -76,6 +84,8 @@ const deckCardDtoSchema: z.ZodType<DeckCardDto> = z.strictObject({
     .min(1, 'slot 最小为 1')
     .max(10, 'slot 最大为 10（每方 10 格）'),
   enchant: z.string().min(1, 'enchant 写附魔 id（该卡 enchantments 目录里的那一件）').optional(),
+  // 覆盖卡面数值：值必须是数字；`speed` / `cdp` 的禁令在 `validateDeck` 里报（结构层只查类型）
+  stats: z.record(z.string().min(1), z.number()).optional(),
 })
 
 export const deckDtoSchema: z.ZodType<DeckDto> = z.strictObject({
@@ -132,7 +142,7 @@ export function validateDeck(
 
   if (registry.getHero(dto.hero) === undefined) {
     issues.push(
-      problem('schema.invalid', `hero 引用了未注册的角色 id：${dto.hero}`, ctx, ['hero'], {
+      problem('deck.hero.unknown', `hero 引用了未注册的角色 id：${dto.hero}`, ctx, ['hero'], {
         suggestion: '该角色可能来自未加载的卡包；请确认 packs/ 下已包含它，或改 hero',
       }),
     )
@@ -140,7 +150,7 @@ export function validateDeck(
 
   if (dto.hp !== undefined && dto.maxHp !== undefined && dto.maxHp < dto.hp) {
     issues.push(
-      problem('schema.invalid', `maxHp（${dto.maxHp}）小于 hp（${dto.hp}）`, ctx, ['maxHp'], {
+      problem('deck.hp.max_less_than_hp', `maxHp（${dto.maxHp}）小于 hp（${dto.hp}）`, ctx, ['maxHp'], {
         severity: 'warn',
         suggestion: 'maxHp 缺省 = hp',
       }),
@@ -151,7 +161,7 @@ export function validateDeck(
     const card = registry.get(entry.id)
     if (card === undefined) {
       issues.push(
-        problem('schema.invalid', `cards[${index}] 引用了未注册的卡牌 id：${entry.id}`, ctx, ['cards', index, 'id'], {
+        problem('deck.card.unknown', `cards[${index}] 引用了未注册的卡牌 id：${entry.id}`, ctx, ['cards', index, 'id'], {
           suggestion: '该卡可能来自未加载的卡包；请确认 packs/ 下已包含它，或改 id',
         }),
       )
@@ -163,7 +173,7 @@ export function validateDeck(
       if (!available.includes(entry.enchant)) {
         issues.push(
           problem(
-            'schema.invalid',
+            'deck.enchant.unknown',
             `cards[${index}] 的 enchant「${entry.enchant}」不在这张卡的 enchantments 目录里`,
             ctx,
             ['cards', index, 'enchant'],
@@ -177,12 +187,30 @@ export function validateDeck(
         )
       }
     }
+    // 阵容覆盖数值（C5）：`speed` / `cdp` **禁写** —— 速度只有状态系数、冷却百分比是行动周期参数，
+    // 两者都不属于"卡面基础层"；允许覆盖会让行动周期随阵容漂移（时序不确定性）。
+    for (const key of Object.keys(entry.stats ?? {})) {
+      if (key === 'speed' || key === 'cdp') {
+        issues.push(
+          problem(
+            'deck.stats.forbidden_key',
+            `cards[${index}] 的 stats 不得覆盖 ${key}`,
+            ctx,
+            ['cards', index, 'stats', key],
+            {
+              suggestion:
+                'speed / cdp 不属于可覆盖的卡面基础层；要调速请改卡面 cooldown（或走加速 / 减速状态）',
+            },
+          ),
+        )
+      }
+    }
   }
 
   for (const [index, id] of (dto.skills ?? []).entries()) {
     if (registry.getSkill(id) === undefined) {
       issues.push(
-        problem('schema.invalid', `skills[${index}] 引用了未注册的技能 id：${id}`, ctx, ['skills', index], {
+        problem('deck.skill.unknown', `skills[${index}] 引用了未注册的技能 id：${id}`, ctx, ['skills', index], {
           suggestion: '该技能可能来自未加载的卡包；请确认 packs/ 下已包含它，或改 id',
         }),
       )
@@ -231,6 +259,7 @@ export function resolveDeck(
       card,
       slot: entry.slot,
       ...(entry.enchant === undefined ? {} : { enchant: entry.enchant }),
+      ...(entry.stats === undefined ? {} : { stats: entry.stats }),
     })
   }
 

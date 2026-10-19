@@ -1,9 +1,11 @@
 {
-  "name": "bazaarsim",
-  "version": "0.0.0",
+  "name": "openbaz",
+  "version": "0.1.0",
   "private": true,
   "description": "异步自走棋卡牌模拟器 — 单包，非 monorepo",
+  "author": "OpenBaz",
   "type": "module",
+  "main": "desktop/main.cjs",
   "engines": {
     "node": "^22.18.0 || ^24.0.0 || >=26.0.0"
   },
@@ -26,7 +28,10 @@
     "dev": "vite",
     "sim:run": "node simulator/run.ts --deckA decks/testA.yml --deckB decks/testB.yml --seed 42",
     "sim:run:quiet": "node simulator/run.ts --deckA decks/testA.yml --deckB decks/testB.yml --seed 42 --quiet",
-    "sim:validate": "node simulator/validate.ts"
+    "sim:validate": "node simulator/validate.ts",
+    "desktop:host": "vite build --config vite.desktop.config.ts",
+    "desktop:start": "npm run build:web && npm run desktop:host && electron .",
+    "desktop:pack": "npm run build:web && npm run desktop:host && electron-builder --win"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
@@ -34,6 +39,8 @@
     "@types/react": "19.3.0",
     "@types/react-dom": "19.2.3",
     "@vitejs/plugin-react": "6.1.2",
+    "electron": "44.9.0",
+    "electron-builder": "26.15.3",
     "eslint": "10.12.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.71.0",
@@ -45,5 +52,35 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "zod": "4.6.5"
+  },
+  "build": {
+    "appId": "app.openbaz.desktop",
+    "productName": "OpenBaz",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "desktop/main.cjs",
+      "desktop/preload.cjs",
+      "desktop/dist/host.cjs",
+      "dist/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "packs/base",
+        "to": "packs/base"
+      }
+    ],
+    "win": {
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }

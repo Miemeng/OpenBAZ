@@ -7,6 +7,7 @@
 //   · 底部信息条 = 无归属不渲染；`multicast > 1` 才标多重触发；
 //   · 定位 = 默认右下、右侧不足翻左、下方不足翻上、最后夹进视口。
 import { describe, expect, it } from 'vitest'
+import type { SummaryLine } from '../../cards/registry.ts'
 import type { Card, FrameCard, FrameStat } from '../../engine/types.ts'
 import type { GaugeView } from './replay.ts'
 import { buildCardDetail, classifyEffectLine, detailEffectsOf, detailStatsOf, placeDetail } from './cardDetail.ts'
@@ -167,6 +168,20 @@ describe('buildCardDetail', () => {
 })
 
 describe('detailEffectsOf（效果区分组）', () => {
+  it('结构化行按 `kind` 分组，不靠中文前缀（AG.6 = A）', () => {
+    const structured: readonly SummaryLine[] = [
+      { kind: 'header', label: null, trigger: null, result: null, text: '已加载 试验卡 v1:' },
+      { kind: 'passive', label: '被动 P10', trigger: '时机 on_player_damaged', result: 'deal_damage 5', text: '  [被动 P10] …' },
+      { kind: 'active', label: '主动', trigger: '行动条充满时', result: 'shield 3', text: '  [主动] …' },
+      { kind: 'enchantCatalog', label: '附魔目录', trigger: null, result: null, text: '  [附魔目录] aegis' },
+    ]
+    const effects = detailEffectsOf(['已加载 试验卡 v1:'], undefined, structured)
+    expect(effects.map((effect) => effect.kind)).toEqual(['active', 'passive'])
+    expect(effects[0]?.trigger).toBe('行动条充满时')
+    expect(effects[0]?.result).toBe('shield 3')
+    expect(effects[1]?.label).toBe('被动 P10')
+  })
+
   it('主动在上、被动在下、光环最后；组内保持原书写顺序', () => {
     const effects = detailEffectsOf([
       '已加载 试验卡 v1:',

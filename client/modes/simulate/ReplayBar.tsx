@@ -4,6 +4,7 @@
 // 本组件不持有状态、不碰计时器，只把用户动作往上抛。
 import { TRIGGER_FRAME_SECONDS, csToSeconds } from '../../../engine/state.ts'
 import { REPLAY_ANIM, type ReplaySpeed } from '../../state/replay.ts'
+import { t } from '../../i18n/index.ts'
 
 interface ReplayBarProps {
   readonly index: number
@@ -46,7 +47,7 @@ export function ReplayBar({
         <button
           type="button"
           className="chip"
-          title="回到开局"
+          title={t('replay.toStart')}
           onClick={() => {
             onSeek(0)
           }}
@@ -56,7 +57,7 @@ export function ReplayBar({
         <button
           type="button"
           className="chip"
-          title="上一帧（←）"
+          title={t('replay.prev')}
           disabled={index <= 0}
           onClick={() => {
             onStep(-1)
@@ -64,13 +65,18 @@ export function ReplayBar({
         >
           ◀
         </button>
-        <button type="button" className="run-button rb-play" title={playing ? '暂停（空格）' : '播放（空格）'} onClick={onTogglePlay}>
-          {playing ? '⏸ 暂停' : '▶ 播放'}
+        <button
+          type="button"
+          className="run-button rb-play"
+          title={playing ? t('replay.pause') : t('replay.play')}
+          onClick={onTogglePlay}
+        >
+          {playing ? t('replay.btnPause') : t('replay.btnPlay')}
         </button>
         <button
           type="button"
           className="chip"
-          title="下一帧（→）"
+          title={t('replay.next')}
           disabled={atEnd}
           onClick={() => {
             onStep(1)
@@ -81,7 +87,7 @@ export function ReplayBar({
         <button
           type="button"
           className="chip"
-          title="跳到末帧"
+          title={t('replay.toEnd')}
           onClick={() => {
             onSeek(last)
           }}
@@ -97,21 +103,21 @@ export function ReplayBar({
         max={last}
         step={1}
         value={index}
-        title="拖动跳转"
+        title={t('replay.seek')}
         onChange={(event) => {
           onSeek(Number(event.target.value))
         }}
       />
 
       <div className="rb-readout">
-        <span className="facet-label">帧</span>
+        <span className="facet-label">{t('replay.frame')}</span>
         <code>
           {String(index)} / {String(last)}
         </code>
-        <span className="facet-label">时刻</span>
+        <span className="facet-label">{t('replay.time')}</span>
         <code>{csToSeconds(timeCs).toFixed(2)}s</code>
         <span className="hint">
-          （触发帧 {String(triggerFrame)} · 一帧 = {TRIGGER_FRAME_SECONDS.toFixed(1)}s）
+          {t('replay.frameHint', { frame: triggerFrame, seconds: TRIGGER_FRAME_SECONDS.toFixed(1) })}
         </span>
       </div>
 
@@ -121,7 +127,7 @@ export function ReplayBar({
             key={String(item)}
             type="button"
             className={item === speed ? 'chip chip-on' : 'chip'}
-            title={`${String(item)} 倍速（只影响播放间隔）`}
+            title={t('replay.speedTitle', { speed: String(item) })}
             onClick={() => {
               onSpeed(item)
             }}
@@ -133,8 +139,8 @@ export function ReplayBar({
 
       {atEnd && <span className="rb-outcome">{outcomeNote}</span>}
 
-      <button type="button" className="chip chip-clear rb-exit" onClick={onExit} title="看终局读数与完整日志">
-        查看结算
+      <button type="button" className="chip chip-clear rb-exit" onClick={onExit} title={t('replay.exit')}>
+        {t('replay.exitShort')}
       </button>
     </div>
   )

@@ -4,6 +4,8 @@
 // 本组件只渲染数据层（`state/cardDetail.ts`）算好的视图 —— 不含任何战斗规则、不解析引擎文本。
 
 import type { CardDetailView } from '../state/cardDetail.ts'
+import { t } from '../i18n/index.ts'
+import { EffectLine, EffectSegments } from './EffectLine.tsx'
 
 interface CardDetailProps {
   readonly view: CardDetailView
@@ -20,10 +22,13 @@ function secondsText(seconds: number): string {
 }
 
 export function CardDetail({ view, left, top, pinned }: CardDetailProps) {
-  const tags = view.foot.tags.join(' · ')
+  // 标签是**作者自定义的开放词表**（`human` / `ice` 这类没有词典可翻）⇒ 加 `#` 前缀，至少看得出是标签不是 id 字段
+  const tags = view.foot.tags.map((tag) => `#${tag}`).join(' · ')
   const footLeft = [tags, view.foot.multicast === null ? '' : `多重触发 ${String(view.foot.multicast)}`]
     .filter((part) => part.length > 0)
     .join(' · ')
+  // 效果文本里的 `self.atk` / `self.freeze` 之类按**完整数值表**解析（数值行只显示六项，但换数要用全部键）
+  const statValues: Readonly<Record<string, number>> = view.values
 
   return (
     <aside
@@ -54,7 +59,7 @@ export function CardDetail({ view, left, top, pinned }: CardDetailProps) {
       <div className="cd-body">
         {/* ② 数值行（§5）：候选清单已固定，**词条存在即显示** */}
         {view.stats.length === 0 ? (
-          <p className="cd-hint">没有可显示的数值</p>
+          <p className="cd-hint">{t('card.noStats')}</p>
         ) : (
           <div className="cd-stats">
             {view.stats.map((row) => (
@@ -92,7 +97,18 @@ export function CardDetail({ view, left, top, pinned }: CardDetailProps) {
                   effect.kind === 'enchant' && view.enchant !== null ? { color: view.enchant.color } : undefined
                 }
               >
-                {effect.text}
+                {/* 结构化行一定带 `label`；文本行（如"当前生效附魔"）没有这三个键 */}
+                {effect.label === undefined ? (
+                  <EffectLine text={effect.text} values={statValues} />
+                ) : (
+                  <EffectSegments
+                    label={effect.label}
+                    trigger={effect.trigger ?? null}
+                    result={effect.result ?? null}
+                    {...(effect.actions === undefined ? {} : { actions: effect.actions })}
+                    values={statValues}
+                  />
+                )}
               </div>
             ))}
           </div>

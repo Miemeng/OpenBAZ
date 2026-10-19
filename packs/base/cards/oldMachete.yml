@@ -1,0 +1,32 @@
+# 旧砍刀（oldMachete）· 小 · 青铜 —— **每次行动变强**：先砍一刀，再给自己 +3 攻击
+#
+# 教学点：一张卡可以有多条主动（共用**同一个**行动条，按书写顺序结算）；
+#        `gain_stat` 给卡牌加 buff；buff 的数值允许写字面量（3）。
+id: oldMachete
+name: 旧砍刀
+version: 1
+size: small
+cooldown: 4.00
+rarity: bronze
+description: 越砍越顺手：每次行动造成「攻击」点伤害，并让自身攻击 +3。
+
+stats:
+  atk: 5
+
+tags: [weapon]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }
+
+  - id: 2
+    kind: active
+    actions:
+      - do: gain_stat
+        stat: atk
+        amount: 3              # buff 加值：允许字面量
+        target: self

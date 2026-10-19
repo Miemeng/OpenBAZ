@@ -1,0 +1,23 @@
+# 普通的剑（plainSword）· 小 · 青铜 —— 最小可用卡：**只有一条主动**，没有触发器
+#
+# 教学点：认识行动条（`cooldown` 秒充满一次）、`deal_damage` 与 `{ ref: self.atk }`。
+id: plainSword
+name: 普通的剑
+version: 1
+size: small
+cooldown: 3.00
+rarity: bronze
+description: 一把最普通的剑：行动条满了就砍，没有别的花样。
+
+stats:
+  atk: 5              # 造成伤害的数值（动作里用 { ref: self.atk } 引用它）
+
+tags: [weapon]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: { ref: self.atk }

@@ -1,5 +1,10 @@
 /* 客户端样式 —— 只保证"能看 + 信息层级清楚"；正式视觉后面再打磨（品阶色 / 卡框已用上） */
 
+/* ===== 设计 token（3.2 步 · F2 = A）=====
+   规则：**新写 / 改到的规则一律引用变量**，不要再写裸 12.5px / 8px。
+   字号 7 档（xs 卡面小字 / sm 灰字 / md 元信息 / body 正文 / lg 面板标题 / h2 区块标题 / xl 页标题）；
+   间距 6 档（1–6）；圆角 3 档 + 胶囊；版面宽度三档由媒体查询改（F5 = A）。
+   存量里还有少量 3 / 5 / 7 / 9px 的一次性值，随所在规则下次改动时并入最近的档。 */
 :root {
   color-scheme: dark;
   --bg: #14161a;
@@ -10,6 +15,55 @@
   --text: #e6e9ef;
   --muted: #9aa3b2;
   --accent: #ffc107;
+
+  /* 字号 */
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-body: 13px;
+  --fs-lg: 16px;
+  --fs-h2: 18px;
+  --fs-xl: 24px;
+  /* 卡面属性通栏（比 xs 大一档：卡图亮底 + 描边，需要更粗一点才读得清） */
+  --fs-stat: 11px;
+
+  /* 间距 */
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 10px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+
+  /* 圆角 */
+  --r-1: 6px;
+  --r-2: 8px;
+  --r-3: 10px;
+  --r-pill: 999px;
+
+  /* 版面（F5 = A：三档定宽；卡面大小跟随宽度，字号不缩放） */
+  --stage-w: 1080px;
+  --left-w: 264px;
+  --rail-w: 264px;
+  /* 桌面壳（§十 C1）预留的窗口标题区高度：浏览器里是 0，Electron 里改成真实高度即可 */
+  --titlebar-h: 0px;
+}
+
+/* 1366 及以上：内容宽 1180；1600 及以上：1240（左/右栏同步 264 → 280） */
+@media (min-width: 1366px) {
+  :root {
+    --stage-w: 1180px;
+    --left-w: 280px;
+    --rail-w: 280px;
+  }
+}
+
+@media (min-width: 1600px) {
+  :root {
+    --stage-w: 1240px;
+    --left-w: 280px;
+    --rail-w: 280px;
+  }
 }
 
 * {
@@ -24,12 +78,13 @@ body {
 }
 
 .app {
-  max-width: 1080px;
+  /* 最小支持宽 1280：更窄就横向滚动（不做手机版，F5 = A 的裁定） */
+  max-width: var(--stage-w);
   margin: 0 auto;
-  padding: 24px;
+  padding: calc(24px + var(--titlebar-h)) 24px 24px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* ——— 顶栏 / 汇总 / 状态 —*/
@@ -38,12 +93,12 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--sp-6);
 }
 
 .topbar h1 {
   margin: 0;
-  font-size: 24px;
+  font-size: var(--fs-xl);
 }
 
 .subtitle {
@@ -51,11 +106,27 @@ body {
   color: var(--muted);
 }
 
+/* 品牌块：菱形标识 + 标题 / 副标题（标识文件 = `client/public/logo-mark.svg`）
+   ⚠️ 标识是**瘦长**的（viewBox 64×92，卡牌 ♦ 的比例）⇒ 只给宽度、高度 auto，别写死正方形。 */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+.brand-mark {
+  flex: 0 0 auto;
+  width: 26px;
+  height: auto;
+  /* 金属蓝在深底上的柔光；不改变尺寸 */
+  filter: drop-shadow(0 0 6px rgb(74 144 217 / 35%));
+}
+
 .reload {
   padding: 8px 14px;
   background: var(--panel);
   border: 1px solid var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -82,7 +153,7 @@ body {
   list-style: none;
   background: #2a1d1d;
   border: 1px solid #6b3b3b;
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: #ffb4a2;
   font: 13px/1.7 ui-monospace, Consolas, monospace;
 }
@@ -96,8 +167,20 @@ body {
   padding: 10px 14px;
   background: #2a1d1d;
   border: 1px solid #6b3b3b;
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: #ffb4a2;
+}
+
+/* 桌面版"没有任何卡牌"的提示条（不是错误、但需要玩家动手放包） */
+.no-cards {
+  margin: 0;
+  padding: 10px 14px;
+  background: #1b2330;
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-2);
+  color: #cfe3ff;
+  font-size: var(--fs-md);
+  line-height: 1.6;
 }
 
 /* ——— 卡牌库 —*/
@@ -105,23 +188,30 @@ body {
 .library {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-4);
 }
 
 .library-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
+/* 搜索框：**只占内容高度**。`flex: 1` 是给卡牌库的横向头部用的（见下一条），
+   摆盘的左栏是**竖向** flex —— 在这里写 `flex: 1` 会让它把剩余高度全吃掉（实测：搜索框变得特别高）。 */
 .search {
-  flex: 1;
+  flex: 0 0 auto;
   padding: 8px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
+}
+
+/* 卡牌库头部：搜索框吃满横向剩余宽度（这一条才是 `flex: 1` 的用途） */
+.library-head .search {
+  flex: 1 1 auto;
 }
 
 .search:focus {
@@ -137,33 +227,33 @@ body {
 .facets {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .facet-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 .facet-label {
   min-width: 36px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .chip {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
   padding: 3px 10px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: var(--text);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--fs-body);
   cursor: pointer;
 }
 
@@ -190,14 +280,14 @@ body {
 .library-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 360px;
-  gap: 12px;
+  gap: var(--sp-5);
   align-items: start;
 }
 
 .card-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
   margin: 0;
   padding: 0;
   max-height: 62vh;
@@ -208,12 +298,12 @@ body {
 .card-row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-4);
   width: 100%;
   padding: 8px 10px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
   text-align: left;
@@ -238,32 +328,57 @@ body {
   font-weight: 600;
 }
 
-/* 卡牌库列表里的卡图缩略（缺图时整个 img 不渲染，布局不留空） */
+/* 卡牌库列表里的卡图缩略：**按卡面真实比例**（小 1:2 / 中 1:1 / 大 3:2），统一 40px 高、宽度随比例。
+   之前是 34×34 方框 + `cover` ⇒ 三种卡都被裁成"小卡"的样子（RW 2026-10-20 指出）。 */
 .card-thumb {
   flex: 0 0 auto;
-  width: 34px;
-  height: 34px;
+  height: 40px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  object-fit: cover;
+  object-fit: fill;
 }
 
-/* 卡牌库右侧详情区的卡图（大一点，按卡面比例 2:3） */
+.card-thumb-small {
+  width: 20px;
+}
+
+.card-thumb-medium {
+  width: 40px;
+}
+
+.card-thumb-large {
+  width: 60px;
+}
+
+/* 卡牌库右侧详情区的卡图：同样按比例给三种尺寸（设计像素 = 卡面三尺寸的 1/2.5） */
 .card-art {
   display: block;
-  width: 120px;
-  height: 180px;
-  margin: 0 0 10px;
+  margin: 0 0 var(--sp-4);
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--r-1);
   object-fit: fill;
+}
+
+.card-art-small {
+  width: 100px;
+  height: 200px;
+}
+
+.card-art-medium {
+  width: 160px;
+  height: 160px;
+}
+
+.card-art-large {
+  width: 240px;
+  height: 160px;
 }
 
 .card-id,
 .card-meta,
 .card-pack {
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .card-id {
@@ -276,7 +391,7 @@ body {
 }
 
 .empty {
-  padding: 12px;
+  padding: var(--sp-5);
   color: var(--muted);
 }
 
@@ -286,21 +401,21 @@ body {
   padding: 14px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .detail h3 {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-3);
   margin: 0 0 6px;
-  font-size: 17px;
+  font-size: var(--fs-h2);
 }
 
 .detail-meta {
   margin: 0 0 10px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .echo {
@@ -308,7 +423,7 @@ body {
   padding: 10px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: #cfe3ff;
   font: 12.5px/1.7 ui-monospace, Consolas, monospace;
   white-space: pre-wrap;
@@ -317,14 +432,14 @@ body {
 .footer {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 code {
   padding: 1px 6px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-1);
   color: var(--accent);
   font-family: ui-monospace, Consolas, monospace;
 }
@@ -344,16 +459,16 @@ code {
 .topbar-actions {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-4);
 }
 
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-1);
   padding: 3px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .tab {
@@ -371,32 +486,48 @@ code {
   color: var(--accent);
 }
 
-/* ——— 摆盘：两栏（左侧卡源 / 右侧棋盘） —*/
+/* ——— 摆盘：两栏（左栏 = 卡牌栏 + 编辑栏；右侧棋盘） —*/
 
+/* 左栏竖分两段（《审阅》§AF = A）：卡牌栏 `flex:1` 吃满剩余高度，编辑栏固定 260px 钉在底部。
+   两列都纵向拉伸 ⇒ 左栏高度跟着棋盘走；卡牌列表不再卡 `62vh`（多出来的高度归它）。 */
 .simulate {
   display: grid;
-  grid-template-columns: 240px minmax(0, 1fr);
+  /* 左栏宽度走 token：1080 档 264 / 宽屏档 280（F5 = A） */
+  grid-template-columns: var(--left-w) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
+}
+
+.sim-left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-4);
+  min-height: 0;
+}
+
+.sim-left > .source {
+  flex: 1 1 auto;
 }
 
 .source {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--sp-3);
+  min-height: 0;
+  padding: var(--sp-5);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .source-list {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
+  min-height: 0;
   margin: 0;
   padding: 0;
-  max-height: 62vh;
   overflow: auto;
   list-style: none;
 }
@@ -404,12 +535,12 @@ code {
 .source-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-3);
   width: 100%;
   padding: 6px 8px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
   text-align: left;
@@ -420,6 +551,8 @@ code {
 
 .source-item:hover {
   border-color: var(--line-2);
+  /* F3：给一点位移反馈（1px，不与点选态冲突） */
+  transform: translateX(1px);
 }
 
 /* 手持中的那张卡（点棋盘格子就会放到那里） */
@@ -439,37 +572,279 @@ code {
 
 .source-meta {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
+}
+
+/* ——— 编辑栏（左栏下半段；`EditPanel`，原 `.es*` 从没有过样式，这里是第一版正式样式） ———
+
+   结构：栏头 32px（标题 + 当前卡名 + 收起按钮）+ 可滚动正文（附魔 → 属性 两个分区）。
+   高度：展开固定 260px、收起 32px（`flex-basis`），正文自己滚 ⇒ 卡牌栏永远拿满剩下的高度。 */
+
+.ep {
+  display: flex;
+  flex: 0 0 260px;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
+}
+
+.ep-closed {
+  flex-basis: 32px;
+}
+
+.ep-head {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 32px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+/* 收起态只剩栏头 ⇒ 不要那条分隔线（否则 32px 的条看起来像被切了一刀） */
+.ep-closed .ep-head {
+  border-bottom: none;
+}
+
+.ep-title {
+  flex: 0 0 auto;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+
+.ep-card {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-toggle {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 20px;
+  padding: 0;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  font: inherit;
+  font-size: var(--fs-sm);
+  line-height: 1;
+  cursor: pointer;
+}
+
+.ep-toggle:hover {
+  border-color: var(--line-2);
+  color: var(--accent);
+}
+
+.ep-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 8px 10px 10px;
+  overflow-y: auto;
+}
+
+/* 分区标题（附魔 / 属性）：小、灰、与上一区留白 */
+.ep-group {
+  margin: 6px 0 2px;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  letter-spacing: 0.02em;
+}
+
+.ep-group:first-child {
+  margin-top: 0;
+}
+
+.ep-dim {
+  color: var(--muted);
+}
+
+/* 空态：垂直居中 + 主副两行（副行是"附魔写在阵容里"那句口径说明） */
+.ep-empty {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  color: var(--muted);
+  font-size: var(--fs-md);
+  text-align: center;
+}
+
+.ep-empty p {
+  margin: 0;
+}
+
+.ep-none {
+  margin: 2px 0;
+  color: var(--muted);
+  font-size: var(--fs-md);
+}
+
+.ep-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* 一条附魔 = 两行式（名字 / 摘要），264px 宽里摘要放不下一行（§AF.4 = A） */
+.ep-item {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: var(--r-1);
+  cursor: pointer;
+}
+
+.ep-item:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ep-item-on {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: var(--line-2);
+}
+
+.ep-item input {
+  flex: 0 0 auto;
+  margin: 4px 0 0;
+  accent-color: var(--accent);
+}
+
+/* 附魔色圆点：与名字那条基线对齐（radio 11px + 上边距 4px ⇒ 圆点也 6px / 上边距 6px） */
+.ep-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 6px;
+  border-radius: 50%;
+}
+
+.ep-txt {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.ep-name {
+  overflow: hidden;
+  font-size: var(--fs-md);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-sum {
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  font-style: normal;
+  line-height: 1.35;
+}
+
+/* 属性 = **可编辑的覆盖值**（C5）：左键名、右数字框；**留空 = 用卡面值**（placeholder 就是卡面值） */
+.ep-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ep-statrow {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.ep-statkey {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ep-statin {
+  flex: 0 0 auto;
+  width: 58px;
+  padding: 1px 6px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--text);
+  font: inherit;
+  font-size: var(--fs-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.ep-statin:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.ep-statin::placeholder {
+  color: #6f7784;
+}
+
+.ep-problem {
+  margin: 6px 0 0;
+  color: #ff9b8a;
+  font-size: var(--fs-sm);
 }
 
 .board-area {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* ——— 玩家面板 —*/
 
 .panel {
-  padding: 12px;
+  padding: var(--sp-5);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .panel-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
+  gap: var(--sp-5);
   margin-bottom: 10px;
 }
 
 .panel-head h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: var(--fs-lg);
 }
 
 .panel-name {
@@ -484,7 +859,7 @@ code {
   padding: 6px 10px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
 }
@@ -496,7 +871,7 @@ code {
   flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-start;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 /* 技能位（编辑态与回放态**共用** `SkillSlots` 组件，只有尺寸与可点性不同）
@@ -506,7 +881,7 @@ code {
   display: flex;
   flex: 0 1 auto;
   flex-wrap: nowrap;
-  gap: 8px;
+  gap: var(--sp-3);
   min-width: 0;
   max-width: 420px;
   overflow-x: auto;
@@ -591,9 +966,9 @@ code {
   bottom: -3px;
   padding: 0 4px;
   background: var(--accent);
-  border-radius: 999px;
+  border-radius: var(--r-pill);
   color: #1a1d24;
-  font-size: 10px;
+  font-size: var(--fs-xs);
   font-style: normal;
 }
 
@@ -601,7 +976,7 @@ code {
 .skill-picker-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
   margin: 0 0 8px;
   padding: 0;
   max-height: 40vh;
@@ -617,7 +992,7 @@ code {
   padding: 6px 10px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
   text-align: left;
@@ -633,7 +1008,7 @@ code {
 }
 
 .skill-picker-item b {
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .skill-picker-item-on b {
@@ -642,7 +1017,7 @@ code {
 
 .skill-picker-item span {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-md);
   line-height: 1.5;
 }
 
@@ -652,7 +1027,7 @@ code {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 /* 头像 **96 × 96 方形**（RW 指示："再改大一点，弄成方形"）—— 编辑态与回放态**同一尺寸同一形状** */
@@ -675,16 +1050,16 @@ code {
 
 .hp-row {
   display: flex;
-  gap: 8px;
+  gap: var(--sp-3);
 }
 
 .hp-row label,
 .run-row label {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .hp-input {
@@ -694,7 +1069,7 @@ code {
 .hp-effective {
   margin: 0;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .panel-issues {
@@ -703,8 +1078,8 @@ code {
   list-style: none;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
-  font-size: 13px;
+  border-radius: var(--r-2);
+  font-size: var(--fs-body);
 }
 
 .issue-error {
@@ -720,13 +1095,13 @@ code {
   padding: 10px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
 }
 
 .skill-picker-title {
   margin: 0 0 8px;
   color: var(--muted);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 /* （`.skill-picker-list` 的样式在 v0.13 已挪到"技能位"那一段：每项 = 技能名 + 效果） */
@@ -736,19 +1111,19 @@ code {
 .board {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .board-scale {
   display: grid;
   /* 与 `.board-row` 同为 **20 个单位列**（10 格 × 2 列）—— 用户是照着这排数字点格子的 */
   grid-template-columns: repeat(20, 1fr);
-  gap: 4px;
+  gap: var(--sp-1);
   margin: 0;
   padding: 0;
   list-style: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-md);
   text-align: center;
 }
 
@@ -759,15 +1134,15 @@ code {
 
 .board-row {
   display: grid;
-  /* **单位网格**：一行 10 格 = 20 列 × 3 行；`aspect-ratio` 让行高跟着宽度走 ⇒ 单位格是正方形，
-     卡面比例 = 小 2:3 / 中 4:3 / 大 6:3（与《卡面表现设计.md》§2 的 200×300 / 400×300 / 600×300 一致）。
+  /* **单位网格**：一行 10 格 = 20 列 × 4 行；`aspect-ratio` 让行高跟着宽度走 ⇒ 单位格是正方形，
+     卡面比例 = 小 2:4 / 中 4:4 / 大 6:4（与《卡面表现设计.md》§2 的 200×400 / 400×400 / 600×400 一致）。
      格 → 列的换算在 `client/state/boardUnits.ts`，摆盘与回放共用一份。 */
   grid-template-columns: repeat(20, 1fr);
-  grid-template-rows: repeat(3, 1fr);
-  aspect-ratio: 20 / 3;
+  grid-template-rows: repeat(4, 1fr);
+  aspect-ratio: 20 / 4;
   /* 兜底：万一某个渲染引擎不给 `aspect-ratio` 撑高（flex 子项的老问题），至少不会塌成一行字高 */
   min-height: 96px;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .board-slot {
@@ -790,8 +1165,8 @@ code {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 12.5px;
+  border-radius: var(--r-1);
+  font-size: var(--fs-md);
   pointer-events: none;
 }
 
@@ -810,7 +1185,7 @@ code {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
   padding: 6px 8px;
   background: var(--panel);
   border: 1px solid var(--line-2);
@@ -851,14 +1226,14 @@ code {
 .board-card-name {
   flex: 1;
   overflow: hidden;
-  font-size: 13px;
+  font-size: var(--fs-body);
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 .board-card-slot {
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }
 
@@ -881,24 +1256,74 @@ code {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-3);
 }
 
 .import-deck {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
+}
+
+/* 每侧一个「阵容文件」清单（临时形态：平铺列表，上线后再考虑二级分类） */
+.deck-files {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding: 6px 0 8px;
+  border-bottom: 1px dashed var(--line-2, rgb(255 255 255 / 8%));
+}
+
+.deck-files-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+
+.deck-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 76px;
+  overflow-y: auto;
+}
+
+.deck-item {
+  padding: 1px 7px;
+  border: 1px solid var(--line-2, rgb(255 255 255 / 10%));
+  border-radius: var(--r-pill);
+  background: rgb(255 255 255 / 4%);
+  color: var(--muted, #b7c0cc);
+  font-size: var(--fs-sm);
+  cursor: pointer;
+}
+
+.deck-item:hover {
+  border-color: #4dabf7;
+  color: #d0ebff;
+}
+
+/* 该侧当前来源的那一份 */
+.deck-item-current {
+  border-color: #4dabf7;
+  background: rgb(77 171 247 / 16%);
+  color: #e7f5ff;
+  font-weight: 600;
 }
 
 .run-row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  padding: 12px;
+  gap: var(--sp-5);
+  padding: var(--sp-5);
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .seed-input {
@@ -909,7 +1334,7 @@ code {
   padding: 8px 18px;
   background: var(--panel-2);
   border: 1px solid var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--text);
   font: inherit;
   cursor: pointer;
@@ -926,43 +1351,49 @@ code {
 .run-result {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px;
+  gap: var(--sp-4);
+  padding: var(--sp-5);
   background: var(--panel);
   border: 1px solid var(--line-2);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .run-result-head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-3);
+}
+
+/* 结算的两颗按钮（回放 / 收起）在右栏里另起一行，不跟标题抢宽度 */
+.run-result-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+  margin-left: auto;
 }
 
 .run-result-head h3 {
+  flex: 1 1 auto;
   margin: 0;
-  font-size: 17px;
-}
-
-.run-result-head .chip {
-  margin-left: auto;
+  font-size: var(--fs-h2);
 }
 
 .run-readout {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
   margin: 0;
   padding: 0;
   list-style: none;
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .run-readout li {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 6px;
+  gap: var(--sp-2);
 }
 
 /* 日志面板：长对局上千行，靠容器滚动（虚拟滚动留到 S7；见《前端设计.md》§12 风险 3） */
@@ -975,7 +1406,7 @@ code {
   padding: 8px 10px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: #cfe3ff;
   font: 12.5px/1.6 ui-monospace, Consolas, monospace;
 }
@@ -992,9 +1423,9 @@ code {
   padding: 8px 12px;
   background: var(--panel-2);
   border: 1px solid var(--line-2);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--accent);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 @media (max-width: 900px) {
@@ -1008,13 +1439,13 @@ code {
 .replay {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: var(--sp-5);
 }
 
 .replay-head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-4);
 }
 
 /* 战斗界面**左上角**的返回按钮（RW：「做到左上角更显眼的位置」）—— 大一点、描边 + 底色都亮 */
@@ -1023,10 +1454,10 @@ code {
   padding: 8px 16px;
   background: rgba(255, 193, 7, 0.12);
   border: 1px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--r-2);
   color: var(--accent);
   font: inherit;
-  font-size: 14px;
+  font-size: var(--fs-body);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1037,7 +1468,7 @@ code {
 
 .replay-head h3 {
   margin: 0;
-  font-size: 18px;
+  font-size: var(--fs-h2);
 }
 
 /* ——— 战场：上 A 下 B，各自「玩家面板 + 一行 10 格」 ——— */
@@ -1045,8 +1476,8 @@ code {
 .battle {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 12px;
+  gap: var(--sp-3);
+  padding: var(--sp-5);
   background: linear-gradient(180deg, #1a1d24 0%, #14161a 45%, #14161a 55%, #1a1d24 100%);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -1055,7 +1486,7 @@ code {
 .battle-board {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .battle-board[data-side='A'] {
@@ -1085,11 +1516,11 @@ code {
   /* **不换行**（RW §V.1 = A：两态统一成一行，技能多了在右侧窗口里横向滚） */
   flex-wrap: nowrap;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-5);
   padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 /* 头像 **96 × 96 方形**（RW 指示："再改大一点，弄成方形"），放在玩家面板**最左侧**；
@@ -1137,7 +1568,7 @@ code {
 .bp-head {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: var(--sp-3);
   min-width: 160px;
 }
 
@@ -1145,25 +1576,25 @@ code {
   padding: 1px 6px;
   background: var(--panel-2);
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--r-1);
   color: var(--muted);
-  font-size: 12px;
+  font-size: var(--fs-md);
 }
 
 .bp-name {
-  font-size: 15px;
+  font-size: var(--fs-lg);
 }
 
 .bp-hero {
   color: var(--muted);
-  font-size: 12.5px;
+  font-size: var(--fs-md);
 }
 
 .bp-bars {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
   min-width: 0;
 }
 
@@ -1172,7 +1603,7 @@ code {
   height: 20px;
   background: var(--panel-2);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--r-1);
   overflow: hidden;
 }
 
@@ -1201,7 +1632,7 @@ code {
   align-items: center;
   justify-content: center;
   color: #f1f3f5;
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px #000;
 }
@@ -1211,7 +1642,7 @@ code {
 .dot-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--sp-2);
   margin: 0;
   padding: 0;
   /* 预留位置：没有持续效果时这一行仍然占位（只是空的） */
@@ -1228,18 +1659,18 @@ code {
   padding: 0 7px;
   background: var(--panel-2);
   border: 1px solid var(--line-2);
-  border-radius: 999px;
-  font-size: 12px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-md);
   font-variant-numeric: tabular-nums;
 }
 
 .dot-badge b {
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .dot-badge em {
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-style: normal;
 }
 
@@ -1251,7 +1682,7 @@ code {
 
 /* 技能位（回放态）的旧类已并入 `.skill-slots-replay`，见上方技能位一段 */
 
-/* ——— 卡面（回放态）：高 3 单位 × 宽 2 / 4 / 6 单位 ———
+/* ——— 卡面（回放态）：高 4 单位 × 宽 2 / 4 / 6 单位 ———
 
    叠层（z-index 从小到大）：
      0 卡图 · 1 进度填充 + 刻度 · 2 属性通栏 / 底部一行 · 3 卡框材质 · 6 飘字
@@ -1316,7 +1747,8 @@ code {
   min-width: 0;
   overflow: hidden;
   color: #fff;
-  font-size: 10px;
+  /* F3：10 → 11（中大卡）；小卡在下面那条 compact 规则里是 10.5 */
+  font-size: var(--fs-stat);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
@@ -1333,17 +1765,17 @@ code {
   top: var(--bc-frame-inset);
 }
 
-/* 小卡（只占 1 格 ≈ 97px 宽）：属性格只显示数字（TS 侧 `compact`），字号再收一点免得挤 */
+/* 小卡（只占 1 格）：属性格只显示数字（TS 侧 `compact`），字号收一档免得挤 */
 .battle-card-compact .bc-stat {
-  font-size: 9.5px;
+  font-size: var(--fs-xs);
 }
 
 .battle-card-compact .bc-name {
-  font-size: 11px;
+  font-size: var(--fs-xs);
 }
 
 .battle-card-compact .bc-pct {
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
 }
 
 /* ② **进度区 = 属性条以下的整块卡面**：填充从下往上长，`height` = 行动条百分比。
@@ -1390,7 +1822,7 @@ code {
   z-index: 2;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-2);
   padding: 5px 6px;
 }
 
@@ -1398,7 +1830,7 @@ code {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--fs-md);
   font-weight: 600;
   text-shadow: 0 1px 2px #000, 0 0 3px #000;
   white-space: nowrap;
@@ -1415,7 +1847,7 @@ code {
 .bc-pct {
   flex: 0 0 auto;
   color: #b2f2bb;
-  font-size: 11.5px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 2px #000;
   white-space: nowrap;
@@ -1464,7 +1896,7 @@ code {
   border: 1px solid var(--line-2);
   border-radius: 4px;
   color: var(--muted);
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
@@ -1498,7 +1930,7 @@ code {
   flex-direction: column;
   align-items: center;
   font-weight: 700;
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-variant-numeric: tabular-nums;
   text-shadow: 0 1px 3px #000, 0 0 6px #000;
   /* 位移与缓动在关键帧里（CSS 读不到 TS 常量）；时长由 `REPLAY_ANIM.floaterMs` 给 */
@@ -1511,7 +1943,7 @@ code {
 .floater-parts {
   display: flex;
   gap: 5px;
-  font-size: 10.5px;
+  font-size: var(--fs-xs);
   font-style: normal;
   font-weight: 400;
 }
@@ -1528,17 +1960,17 @@ code {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: var(--sp-4);
   padding: 10px 12px;
   background: var(--panel);
   border: 1px solid var(--line-2);
-  border-radius: 10px;
+  border-radius: var(--r-3);
 }
 
 .rb-controls {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .rb-controls .chip:disabled {
@@ -1559,56 +1991,128 @@ code {
 .rb-readout {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  font-size: 12.5px;
+  gap: var(--sp-2);
+  font-size: var(--fs-md);
 }
 
 .rb-speeds {
   display: flex;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .rb-outcome {
   color: var(--accent);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 
 .rb-exit {
   margin-left: auto;
 }
 
-/* ——— 当前帧的动作日志 ——— */
+/* ——— 回放 / 结算的右栏（3.2 步 · F1 = A） ———
+   摆盘是「左栏 + 棋盘」，回放 / 结算是「棋盘 + 右栏」：右栏宽度复用 `--rail-w`（与左栏同宽），
+   所以切态时棋盘**不跳**；回放填"本帧动作日志"，结算填"终局读数 + 完整日志"，都不再追加到页面下方。 */
+.replay-stage {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--rail-w);
+  gap: 14px;
+  align-items: start;
+}
 
-.replay-log {
+.replay-main {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--sp-5);
+  min-width: 0;
 }
 
-.replay-log-head {
+.rail {
   display: flex;
-  align-items: baseline;
-  gap: 10px;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--r-3);
 }
 
-/* 回放视图里战场更高（卡面 3 单位），日志面板相应收矮一点，免得整页要滚很远 */
-.replay-log .run-log {
-  max-height: 26vh;
+.rail-head {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-3) var(--sp-4);
+  border-bottom: 1px solid var(--line);
+}
+
+.rail-body {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-height: 0;
+  max-height: calc(100vh - 260px);
+  padding: var(--sp-3) var(--sp-4);
+  overflow: auto;
+}
+
+/* 右栏里的日志：容器已经负责滚动与留白，这里只保留行距 */
+.run-log-rail {
+  max-height: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* 结算卡直接铺在右栏里（不要它自己的面板壳） */
+.rail-result .run-result {
+  max-height: calc(100vh - 200px);
+  overflow: auto;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+/* 外层已经滚动，里面的日志不要再套一层滚动条 */
+.rail-result .run-log {
+  max-height: none;
+}
+
+/* 回放头部右侧的操作提示（F4：两态手势不同，各给一句） */
+.replay-hint {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: var(--fs-sm);
+}
+
+/* ——— 统一空态（F6）：卡牌库 / 回放日志 / 阵容清单 ——— */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: var(--sp-4) var(--sp-3);
+  text-align: center;
+}
+
+.empty-state-main {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-body);
+}
+
+.empty-state-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--fs-sm);
 }
 
 /* ——— 结算面板上的回放入口 ——— */
 
 .run-button-replay {
   padding: 6px 14px;
-  font-size: 13px;
-}
-
-.run-result-head .run-button-replay {
-  margin-left: auto;
-}
-
-.run-result-head .chip {
-  margin-left: 0;
+  font-size: var(--fs-body);
 }
 
 /* ——— 关键帧 ——— */
@@ -1700,7 +2204,7 @@ code {
   flex-direction: column;
   background: var(--panel);
   border: 1px solid var(--line-2);
-  border-radius: 6px;
+  border-radius: var(--r-1);
   box-shadow: 0 12px 32px rgb(0 0 0 / 45%);
   /* 悬停窗**不吃指针事件**：否则"移出卡面即收"会因为指针进了窗口而收不掉 */
   pointer-events: none;
@@ -1720,7 +2224,7 @@ code {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
+  gap: var(--sp-3);
   padding: 8px 10px;
   border-bottom: 1px solid var(--line-2);
 }
@@ -1739,7 +2243,7 @@ code {
   padding: 1px 6px;
   border-radius: 3px;
   color: #10161f;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 700;
 }
 
@@ -1748,14 +2252,14 @@ code {
   margin: 0;
   padding: 6px 10px 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .cd-body {
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-3);
   min-height: 0;
   padding: 8px 10px;
   overflow-y: auto;
@@ -1764,21 +2268,21 @@ code {
 .cd-hint {
   margin: 0;
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 /* ② 数值行：顺序与配色都来自 `STAT_ROW`（词条存在即渲染，值为 0 也画） */
 .cd-stats {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .cd-stat {
   padding: 1px 5px;
   border-radius: 3px;
   color: #fff;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
   font-weight: 700;
   text-shadow: 0 1px 1px #000;
@@ -1788,11 +2292,11 @@ code {
 .cd-gauge {
   display: flex;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-3);
   padding: 4px 6px;
   border: 1px solid var(--line-2);
   border-radius: 4px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1806,7 +2310,7 @@ code {
 .cd-effects {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
 }
 
 .cd-effect {
@@ -1814,8 +2318,9 @@ code {
   border-left: 3px solid var(--line-2);
   border-radius: 0 4px 4px 0;
   background: rgb(255 255 255 / 3%);
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: var(--fs-sm);
+  /* F3：中文长描述在 360px 窗口里断行密 ⇒ 行高放到 1.7 */
+  line-height: 1.7;
   overflow-wrap: break-word;
 }
 
@@ -1835,17 +2340,83 @@ code {
   border-left-color: #63e6be;
 }
 
+/* 效果行统一形态：`[标签] 触发器 ▶ 结果`（组件 = components/EffectLine.tsx）
+   —— 三角形是内联 SVG，颜色吃 currentColor；这里只定间距与层级 */
+.ef {
+  display: flex;
+  align-items: baseline;
+  gap: var(--sp-2);
+  flex-wrap: wrap;
+}
+
+.ef-tag {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 8%);
+  color: #ced4da;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.ef-trigger {
+  opacity: 0.78;
+}
+
+.ef-tri {
+  flex: 0 0 auto;
+  align-self: center;
+  color: #ffa94d;
+}
+
+.ef-result {
+  font-weight: 600;
+}
+
+/* 卡牌库的效果回显（原 `.echo` 的 `<pre>` 换成了结构化行） */
+.ef-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  max-height: 46vh;
+  padding-right: 4px;
+  overflow-y: auto;
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+.ef-head {
+  margin: 0;
+  color: #a5d8ff;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+}
+
+.ef-row {
+  padding: 3px 6px;
+  border-left: 2px solid rgb(255 255 255 / 10%);
+  background: rgb(255 255 255 / 2.5%);
+  border-radius: 0 4px 4px 0;
+}
+
+.ef-note {
+  margin: 0;
+  opacity: 0.6;
+  font-size: var(--fs-xs);
+}
+
 /* ⑤ 底部信息条：标签 / 多重触发 | 归属 / 占格 / 版本（无归属时那一格不渲染） */
 .cd-foot {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--sp-3);
   padding: 6px 10px;
   border-top: 1px solid var(--line-2);
   color: var(--muted);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .cd-foot-left,
@@ -1853,4 +2424,22 @@ code {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ——— 交互一致性（F4）：光标语义统一 ———
+   可点 = pointer；场上已有的卡 = "可在它上面操作"；手持一张卡时格子换成 copy（"放这里"）。
+   棋盘是按钮网格（`.board-slot` 本来就是 `cursor: pointer`），这里只补两处。 */
+.board-card {
+  cursor: pointer;
+}
+
+.board-area[data-held='true'] .board-slot {
+  cursor: copy;
+}
+
+/* 收窄到单列的降级（与 `.simulate` 同口径）：棋盘在前、右栏落到下面 */
+@media (max-width: 900px) {
+  .replay-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -2,6 +2,10 @@
 node_modules/
 dist/
 
+# 桌面壳：electron-builder 的输出（安装包 / 免安装目录）
+# 注：`desktop/dist/`（数据层构建产物）已被上面的 `dist/` 覆盖
+release/
+
 # 日志与临时文件
 *.log
 npm-debug.log*

@@ -37,7 +37,7 @@
 
 id: test                 # 必须与目录名逐字一致
 name: 测试卡包
-version: 1
+version: 2
 description: 内置机制覆盖包：每种原语 / 状态 / 光环 / 技能形态各至少一张，数值均为占位
 
 builtin: true            # 随程序分发的内置包（用户故事 1 的"内置基础卡包"）

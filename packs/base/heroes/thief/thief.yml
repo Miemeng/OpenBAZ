@@ -1,0 +1,15 @@
+# 角色 —— 盗贼（thief）
+# 目录名 / 文件名 / 文件内 id 三者必须逐字一致：heroes/thief/thief.yml
+# 字段定义见《YAML 数据格式规范.md》§6（角色只有 7 个字段）
+
+id: thief
+name: 盗贼
+version: 1
+
+initHp: 300              # 初始血量
+initMaxHp: 300           # 血量上限（缺省 = initHp）
+levelupMaxHp: [100, 200, 300, 400]
+                         # 升级提升的上限（升级机制尚未实现，占位）
+
+description: 基础角色：标准血量 300 / 300，适合第一局。
+# 头像：images/heroes/thief/avatar.png（文件名固定 avatar.png；缺失由客户端回落首字色块）

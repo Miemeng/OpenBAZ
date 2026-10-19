@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OpenBaz 字标：首字母 O 画成**卡牌 ♦ 比例的空心菱形**（宽 ≈ 0.65 × 高），金属渐变蓝；
+     其余 "penBaz" 用无衬线 600 字重 + 冷白金属渐变（深色底可读）。
+     用途：README / 教程 / 启动画面；界面里用同目录的 logo-mark.svg（只要那个菱形）。
+     说明：文字用系统无衬线字体渲染（Windows = Segoe UI），非路径化 —— 需要绝对一致时再转曲。 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 380 140" role="img" aria-label="OpenBaz">
+  <title>OpenBaz</title>
+  <defs>
+    <!-- 金属蓝（菱形）：亮边 → 深蓝 → 反光条 → 亮边 -->
+    <linearGradient id="ob-metal" x1="0" y1="0" x2="0.72" y2="1">
+      <stop offset="0" stop-color="#eaf6ff" />
+      <stop offset="0.16" stop-color="#9fd0ff" />
+      <stop offset="0.34" stop-color="#4a90d9" />
+      <stop offset="0.5" stop-color="#1f4f8f" />
+      <stop offset="0.62" stop-color="#3d7cc0" />
+      <stop offset="0.78" stop-color="#bfe2ff" />
+      <stop offset="0.9" stop-color="#5a9ad8" />
+      <stop offset="1" stop-color="#24568f" />
+    </linearGradient>
+    <!-- 冷白金属（文字）：上亮下暗，压住深色底 -->
+    <linearGradient id="ob-text" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff" />
+      <stop offset="0.55" stop-color="#dbe9f8" />
+      <stop offset="1" stop-color="#9fb8d2" />
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#ob-metal)" stroke-width="9" stroke-linejoin="miter">
+    <path d="M54 30 L80 70 L54 110 L28 70 Z" />
+  </g>
+  <!-- 倒角高光（同路径细亮线）：放大时给"金属边"的质感 -->
+  <path
+    d="M54 30 L80 70 L54 110 L28 70 Z"
+    fill="none"
+    stroke="#f2f9ff"
+    stroke-opacity="0.5"
+    stroke-width="1.8"
+    stroke-linejoin="miter"
+  />
+  <text
+    x="100"
+    y="92"
+    fill="url(#ob-text)"
+    font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Microsoft YaHei', sans-serif"
+    font-size="62"
+    font-weight="600"
+    letter-spacing="-1"
+  >penBaz</text>
+</svg>

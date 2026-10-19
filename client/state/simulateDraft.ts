@@ -36,6 +36,33 @@ export interface DraftPlacement {  /** 草稿内唯一 = `cardId-slot`（同名�
    * 由 `engine/board.ts` 的 `buildBoardCards` 开局写进 `BoardCard.enchant`。
    */
   readonly enchant?: string
+  /**
+   * **覆盖卡面数值**（C5；选填 = 全部用卡面值）。
+   *
+   * 语义 = **覆盖**（`{ atk: 12 }` ⇒ 这张卡按 12 算）；导出到 deck 的 `cards[].stats`。
+   * `speed` / `cdp` 在编辑器里**不给入口**（校验层也会拒）。
+   */
+  readonly stats?: Readonly<Record<string, number>>
+}
+
+/**
+ * 复制一处摆盘并重设两个可选字段（`undefined` = 清除）。
+ *
+ * **显式列字段**：`{...placement}` 会把要清除的旧值一起带回去，所以这里逐字段重建。
+ */
+function rebuildPlacement(
+  placement: DraftPlacement,
+  enchant: string | undefined,
+  stats: Readonly<Record<string, number>> | undefined,
+): DraftPlacement {
+  const cleaned = stats === undefined || Object.keys(stats).length === 0 ? undefined : stats
+  return {
+    uid: placement.uid,
+    cardId: placement.cardId,
+    slot: placement.slot,
+    ...(enchant === undefined ? {} : { enchant }),
+    ...(cleaned === undefined ? {} : { stats: cleaned }),
+  }
 }
 
 /** 改某一处摆盘的附魔（`undefined` = 清除）；**即时生效**，不做二次确认 */
@@ -43,8 +70,33 @@ export function withPlacementEnchant(side: SideDraft, index: number, enchant: st
   return {
     ...side,
     placements: side.placements.map((placement, at) =>
-      at === index ? (enchant === undefined ? { uid: placement.uid, cardId: placement.cardId, slot: placement.slot } : { ...placement, enchant }) : placement,
+      at === index ? rebuildPlacement(placement, enchant, placement.stats) : placement,
     ),
+  }
+}
+
+/**
+ * 改某一处摆盘的一项**覆盖数值**（`undefined` = 撤掉这一项，回到卡面值）；即时生效。
+ *
+ * 不校验数值合法性（编辑器里是数字输入框，`validateDeck` 会拦 `speed` / `cdp`）。
+ */
+export function withPlacementStat(
+  side: SideDraft,
+  index: number,
+  stat: string,
+  value: number | undefined,
+): SideDraft {
+  return {
+    ...side,
+    placements: side.placements.map((placement, at) => {
+      if (at !== index) return placement
+      const next: Record<string, number> = {}
+      for (const [key, current] of Object.entries(placement.stats ?? {})) {
+        if (key !== stat) next[key] = current
+      }
+      if (value !== undefined) next[stat] = value
+      return rebuildPlacement(placement, placement.enchant, next)
+    }),
   }
 }
 
@@ -100,7 +152,16 @@ export function sideSignature(side: SideDraft): string {
     hero: side.heroId,
     hp: side.hpText,
     maxHp: side.maxHpText,
-    cards: side.placements.map((placement) => [placement.cardId, placement.slot, placement.enchant ?? null]),
+    cards: side.placements.map((placement) => [
+      placement.cardId,
+      placement.slot,
+      placement.enchant ?? null,
+      // 覆盖数值按键排序后参与指纹（对象键序不进比较）
+      Object.entries(placement.stats ?? {})
+        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .map(([key, value]) => `${key}=${String(value)}`)
+        .join(','),
+    ]),
     skills: [...side.skills].sort(),
   })
 }
@@ -115,13 +176,25 @@ export function isSideModified(side: SideDraft): boolean {
  * 编辑操作（全部纯函数：进 SideDraft、出新的 SideDraft）
  * ------------------------------------------------------------------ */
 
-/** 放一张卡（同名卡可多张：**不做张数扣减**）。`enchant` = 该处摆盘的附魔（挪位时由调用方带过来） */
-export function addPlacement(side: SideDraft, cardId: string, slot: number, enchant?: string): SideDraft {
+/** 放一张卡（同名卡可多张：**不做张数扣减**）。`enchant` / `stats` = 该处摆盘的配装（挪位时由调用方带过来） */
+export function addPlacement(
+  side: SideDraft,
+  cardId: string,
+  slot: number,
+  enchant?: string,
+  stats?: Readonly<Record<string, number>>,
+): SideDraft {
   return {
     ...side,
     placements: [
       ...side.placements,
-      { uid: placementUid(cardId, slot), cardId, slot, ...(enchant === undefined ? {} : { enchant }) },
+      {
+        uid: placementUid(cardId, slot),
+        cardId,
+        slot,
+        ...(enchant === undefined ? {} : { enchant }),
+        ...(stats === undefined ? {} : { stats }),
+      },
     ],
   }
 }
@@ -210,6 +283,7 @@ export function sideToDeckDto(
       id: placement.cardId,
       slot: placement.slot,
       ...(placement.enchant === undefined ? {} : { enchant: placement.enchant }),
+      ...(placement.stats === undefined ? {} : { stats: placement.stats }),
     })),
     ...(side.skills.length === 0 ? {} : { skills: [...side.skills] }),
   }
@@ -278,6 +352,7 @@ export function draftFromDeckText(
       cardId: card.id,
       slot: card.slot,
       ...(card.enchant === undefined ? {} : { enchant: card.enchant }),
+      ...(card.stats === undefined ? {} : { stats: card.stats }),
     })),
     skills: [...(dto.skills ?? [])],
     // 导入 = 拷贝：记下来源与该刻指纹，界面据此显示"来源 / 已修改"，**绝不回写文件**

@@ -60,9 +60,37 @@ const restrictHostGlobals = [
 ]
 
 export default [
-  { ignores: ['node_modules/**', 'dist/**', 'tools/**'] },
+  { ignores: ['node_modules/**', 'dist/**', 'desktop/dist/**', 'release/**', 'tools/**'] },
   js.configs.recommended,
   ...tseslint.configs.recommended,
+
+  // 桌面主进程 / 预加载是**CommonJS 纯 JS**（《审阅》§AI.3 = A）：给它们 Node 的公共全局，
+  // 否则 js.configs.recommended 的 no-undef 会把 require / module / process 全报一遍。
+  // 同时要关掉 `@typescript-eslint/no-require-imports`：这条规则是为 ESM/TS 设计的，
+  // 在 `.cjs` 里 `require()` 是**正确写法**（主进程刻意不引入构建步骤）。
+  {
+    files: ['desktop/**/*.cjs'],
+    languageOptions: {
+      sourceType: 'commonjs',
+      globals: {
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        process: 'readonly',
+        __dirname: 'readonly',
+        console: 'readonly',
+        Buffer: 'readonly',
+        URL: 'readonly',
+        // Node 18+ 的全局（Electron 主进程里直接用，不 import）
+        Response: 'readonly',
+        Request: 'readonly',
+        fetch: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
 
   // 全体：确定性+ 只写可擦除语法
   {

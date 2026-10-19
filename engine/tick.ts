@@ -1322,6 +1322,8 @@ function snapshotCard(state: BattleState, boardCard: BoardCard): FrameCard {
   // ⚠️ 附魔的 `stats` 是"并入卡面基础层"的第三来源：不把它的键收进来，挂上绿宝石后
   //    卡面数值行永远不会出现"疗"（`effectiveStat('heal')` 有值，但键不在表里 ⇒ 不渲染）。
   for (const key of Object.keys(activeEnchantOf(boardCard)?.stats ?? {})) keys.add(key)
+  // ⚠️ 同理：阵容覆盖（`decks/*.yml` 的 `cards[].stats`）也可能带来卡面**没有**的键
+  for (const key of Object.keys(boardCard.statOverrides ?? {})) keys.add(key)
   keys.delete('speed')
   const stats: FrameStat[] = [...keys]
     .sort((left, right) => (left < right ? -1 : left > right ? 1 : 0))

@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- OpenBaz 标识（图标版）：大写 O = 卡牌 ♦ 比例的**空心菱形**（宽 ≈ 0.65 × 高），金属渐变蓝。
+     换色只改下面的 gradient；单色场景把 stroke 改成 currentColor 即可。 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 92" role="img" aria-label="OpenBaz">
+  <title>OpenBaz</title>
+  <defs>
+    <!-- 金属蓝：亮边 → 深蓝 → 反光条 → 亮边，斜向打光 -->
+    <linearGradient id="ob-metal" x1="0" y1="0" x2="0.72" y2="1">
+      <stop offset="0" stop-color="#eaf6ff" />
+      <stop offset="0.16" stop-color="#9fd0ff" />
+      <stop offset="0.34" stop-color="#4a90d9" />
+      <stop offset="0.5" stop-color="#1f4f8f" />
+      <stop offset="0.62" stop-color="#3d7cc0" />
+      <stop offset="0.78" stop-color="#bfe2ff" />
+      <stop offset="0.9" stop-color="#5a9ad8" />
+      <stop offset="1" stop-color="#24568f" />
+    </linearGradient>
+  </defs>
+  <path
+    d="M32 6 L58 46 L32 86 L6 46 Z"
+    fill="none"
+    stroke="url(#ob-metal)"
+    stroke-width="8"
+    stroke-linejoin="miter"
+    stroke-linecap="butt"
+  />
+  <!-- 倒角高光：同路径上一条更细的亮线，小尺寸下几乎不可见、放大时给"金属边"的质感 -->
+  <path
+    d="M32 6 L58 46 L32 86 L6 46 Z"
+    fill="none"
+    stroke="#f2f9ff"
+    stroke-opacity="0.55"
+    stroke-width="1.6"
+    stroke-linejoin="miter"
+  />
+</svg>

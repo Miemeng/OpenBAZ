@@ -6,6 +6,7 @@ import {
   movePlacementTo,
   sideSignature,
   withPlacementEnchant,
+  withPlacementStat,
   type SideDraft,
 } from './simulateDraft.ts'
 
@@ -62,6 +63,45 @@ describe('挪位不丢附魔（回归）', () => {
     const plain = addPlacement(sideOf(), 'emberWolf', 4)
     const plainLast = plain.placements[plain.placements.length - 1]
     expect(plainLast !== undefined && 'enchant' in plainLast).toBe(false)
+  })
+})
+
+describe('覆盖数值（C5）', () => {
+  it('设置 / 逐项撤掉：只改目标那处；全撤掉后不留 stats 键', () => {
+    const one = withPlacementStat(sideOf(), 0, 'atk', 12)
+    expect(one.placements[0]?.stats).toEqual({ atk: 12 })
+    expect(one.placements[1]?.stats).toBeUndefined()
+
+    const two = withPlacementStat(one, 0, 'shield', 3)
+    expect(two.placements[0]?.stats).toEqual({ atk: 12, shield: 3 })
+
+    const dropped = withPlacementStat(two, 0, 'atk', undefined)
+    expect(dropped.placements[0]?.stats).toEqual({ shield: 3 })
+
+    const cleared = withPlacementStat(dropped, 0, 'shield', undefined)
+    expect(cleared.placements[0] !== undefined && 'stats' in cleared.placements[0]).toBe(false)
+  })
+
+  it('挪位不丢覆盖；清附魔**不会**顺手清掉覆盖（老实现重建对象时会丢）', () => {
+    const set = withPlacementEnchant(withPlacementStat(sideOf(), 0, 'atk', 12), 0, 'aegis')
+    const moved = movePlacementTo(set, 0, 5)
+    expect(moved.placements[0]?.slot).toBe(5)
+    expect(moved.placements[0]?.stats).toEqual({ atk: 12 })
+    expect(moved.placements[0]?.enchant).toBe('aegis')
+
+    const noEnchant = withPlacementEnchant(moved, 0, undefined)
+    expect(noEnchant.placements[0]?.stats).toEqual({ atk: 12 })
+    expect(noEnchant.placements[0] !== undefined && 'enchant' in noEnchant.placements[0]).toBe(false)
+  })
+
+  it('覆盖数值参与"已修改"指纹（改回原值即复原）', () => {
+    const base: SideDraft = { ...sideOf(), sourcePath: 'decks/testA.yml' }
+    const imported: SideDraft = { ...base, sourceSignature: sideSignature(base) }
+    expect(isSideModified(imported)).toBe(false)
+
+    const changed = withPlacementStat(imported, 0, 'atk', 12)
+    expect(isSideModified(changed)).toBe(true)
+    expect(isSideModified(withPlacementStat(changed, 0, 'atk', undefined))).toBe(false)
   })
 })
 

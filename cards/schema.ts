@@ -24,6 +24,7 @@ import { ALL_STAT_KEYS, DOT_STAT_KEYS, STAT_KEYS } from '../engine/stat-keys.ts'
 import { ENGINE_VERSION } from '../engine/version.ts'
 import type { CardStatusKind, PrimitiveName, SelectorQuery } from '../engine/types.ts'
 import { LOAD_ERROR_CODES, type ValidationError } from './types.ts'
+import { DEFAULT_LOCALE, type LocalizedText } from './text.ts'
 import { collectPositions, formatIssuePath, lookupPosition, type SourcePosition } from './yaml-positions.ts'
 
 /* ------------------------------------------------------------------ *
@@ -275,7 +276,8 @@ export interface ActionDto {
 
 export interface AuraApplyDto {
   readonly stat: string
-  readonly amount: number
+  /** 平铺数额：字面量或表达式（`{ ref: self.atk }` / `{ add: [...] }`） */
+  readonly amount: ExprDto
 }
 
 export interface AuraMulDto {
@@ -303,7 +305,7 @@ export interface AbilityDto {
 export interface EnchantDefDto {
   readonly id: string
   /** 显示名（选填；缺省回落 id；只用于表现层） */
-  readonly name?: string | undefined
+  readonly name?: LocalizedText | undefined
   /** 玩家自定义的附魔颜色（`#rrggbb`；缺省回落内置色，见 §AE） */
   readonly color?: string | undefined
   readonly aura?: AuraDto | undefined
@@ -325,14 +327,19 @@ export interface InheritOverrideDto {
 
 export interface CardDto {
   readonly id: string
-  readonly name: string
+  /** 显示名（见 `cards/text.ts` 的 `LocalizedText`：裸字符串 = 默认语言，也可写 `{ 'zh-CN': …, en: … }`）。 */
+  readonly name: LocalizedText
   readonly version: number
   /** 单位 = 秒（可两位小数）；`-1` = 纯被动物品。映射期用 `secondsToCs()` 换算。 */
   readonly cooldown: number
   readonly size: (typeof CARD_SIZES)[number]
   readonly rarity: string
-  readonly stats: Readonly<Record<string, number>>
-  readonly description?: string | undefined
+  /**
+   * 数值表（**整表选填**）：不写 ⇒ 这张卡没有任何数值属性（`atk` 也不再必填）。
+   * 效果里引用 `self.<stat>` 时，键必须已经在表里声明过（见 `checkExprRefs`）。
+   */
+  readonly stats?: Readonly<Record<string, number>> | undefined
+  readonly description?: LocalizedText | undefined
   readonly slots?: number | undefined
   readonly owner?: string | undefined
   readonly multicast?: number | undefined
@@ -347,7 +354,7 @@ export interface CardDto {
 
 export interface SkillDto {
   readonly id: string
-  readonly name: string
+  readonly name: LocalizedText
   readonly version: number
   /**
    * **品阶 id**（**必填**，: 与卡牌 `CardDto.rarity` 同口径 = 本包 `rarities.yml` 的 `rarities[].id`）。
@@ -361,27 +368,27 @@ export interface SkillDto {
   readonly condition?: ConditionDto | undefined
   readonly actions?: readonly ActionDto[] | undefined
   readonly aura?: AuraDto | undefined
-  readonly description?: string | undefined
+  readonly description?: LocalizedText | undefined
 }
 
 export interface HeroDto {
   readonly id: string
-  readonly name: string
+  readonly name: LocalizedText
   readonly version: number
   readonly initHp: number
   readonly initMaxHp?: number | undefined
   readonly levelupMaxHp?: readonly number[] | undefined
-  readonly description?: string | undefined
+  readonly description?: LocalizedText | undefined
 }
 
 export interface RarityDto {
   readonly id: string
-  readonly name: string
+  readonly name: LocalizedText
   readonly color: string
   readonly frame?: string | undefined
   /**
    * **该品阶的卡牌基础价值**（ 新增； ``：价值定义并入品阶文件）。
-   * 卡面 `stats.value` 缺省时按它初始化；不写则回落到引擎内置兜底表（bronze 1 / silver 3 / gold 8 / diamond 20）。
+   * 卡面 `stats.value` 缺省时按它初始化；不写则回落到引擎内置兜底表（bronze 1 / silver 2 / gold 4 / diamond 8）。
    */
   readonly value?: number | undefined
   /**
@@ -409,9 +416,9 @@ export interface EngineRangeDto {
 
 export interface PackManifestDto {
   readonly id: string
-  readonly name: string
+  readonly name: LocalizedText
   readonly version: number
-  readonly description?: string | undefined
+  readonly description?: LocalizedText | undefined
   readonly builtin?: boolean | undefined
   readonly owner?: string | undefined
   readonly engineRange: readonly EngineRangeDto[]
@@ -490,7 +497,7 @@ const actionDtoSchema = z.strictObject({
   enchant: z.string().min(1).optional(),
 })
 
-const auraApplyDtoSchema = z.strictObject({ stat: z.string().min(1), amount: z.number() })
+const auraApplyDtoSchema = z.strictObject({ stat: z.string().min(1), amount: exprDtoSchema })
 const auraMulDtoSchema = z.strictObject({ stat: z.string().min(1), factor: z.number() })
 
 const auraDtoSchema: z.ZodType<AuraDto> = z.strictObject({
@@ -535,14 +542,25 @@ const inheritOverrideDtoSchema = z.strictObject({
 const ID_PATTERN = /^[A-Za-z][A-Za-z0-9_]*$/
 
 /**
+ * 内联多语言文本（AG.1 = A）：裸字符串 = 默认语言；对象 = `语言 → 文案`。
+ *
+ * 对象**必须含默认语言条目**（否则"这条不翻"时没有兜底文案）；解析在映射层
+ * （`cards/map.ts` 调 `cards/text.ts` 的 `resolveText`），引擎看到的仍是 `string`。
+ */
+export const localizedTextSchema = z
+  .union([z.string().min(1), z.record(z.string(), z.string().min(1))])
+  .refine((value) => typeof value === 'string' || DEFAULT_LOCALE in value, {
+    message: `多语言文本必须包含默认语言「${DEFAULT_LOCALE}」的条目（或直接写裸字符串）`,
+  })
+
+/**
  * 一件附魔：`id` + **至少一块**效果（`aura` / `stats` / `actions`）。
  *
  * 三块全空的附魔没有任何作用，属写法错误（`error`）。
  */
-const enchantDefDtoSchema: z.ZodType<EnchantDefDto> = z
-  .strictObject({
+const enchantDefDtoSchema: z.ZodType<EnchantDefDto> = z.strictObject({
     id: z.string().regex(ID_PATTERN, 'id 首字符必须是字母，其余为字母 / 数字 / 下划线（可驼峰）'),
-    name: z.string().min(1).optional(),
+    name: localizedTextSchema.optional(),
     color: z
       .string()
       .regex(/^#[0-9A-Fa-f]{6}$/, 'color 写 #rrggbb（六位十六进制，如 #b197fc）')
@@ -558,13 +576,13 @@ const enchantDefDtoSchema: z.ZodType<EnchantDefDto> = z
 
 export const cardDtoSchema: z.ZodType<CardDto> = z.strictObject({
   id: z.string().regex(ID_PATTERN, 'id 首字符必须是字母，其余为字母 / 数字 / 下划线（可驼峰）'),
-  name: z.string().min(1),
+  name: localizedTextSchema,
   version: z.int().min(1, 'version 必须 ≥ 1'),
   cooldown: z.number().refine((value) => value === -1 || value > 0, 'cooldown 必须是 -1（纯被动物品）或 > 0 的秒数'),
   size: z.enum(CARD_SIZES),
   rarity: z.string().min(1),
-  stats: z.record(z.string(), z.number()),
-  description: z.string().optional(),
+  stats: z.record(z.string(), z.number()).optional(),
+  description: localizedTextSchema.optional(),
   slots: z.int().min(1).max(3).optional(),
   owner: z.string().optional(),
   multicast: z.int().min(1).optional(),
@@ -578,7 +596,7 @@ export const cardDtoSchema: z.ZodType<CardDto> = z.strictObject({
 
 export const skillDtoSchema: z.ZodType<SkillDto> = z.strictObject({
   id: z.string().regex(ID_PATTERN, 'id 首字符必须是字母，其余为字母 / 数字 / 下划线（可驼峰）'),
-  name: z.string().min(1),
+  name: localizedTextSchema,
   version: z.int().min(1, 'version 必须 ≥ 1'),
   heroes: z.array(z.string().min(1)).min(1, 'heroes 必填且非空（可写 common / sp）'),
   rarity: z.string().min(1, 'rarity 必填（与卡牌同口径：技能的品阶 id）'),
@@ -588,24 +606,24 @@ export const skillDtoSchema: z.ZodType<SkillDto> = z.strictObject({
   condition: conditionDtoSchema.optional(),
   actions: z.array(actionDtoSchema).optional(),
   aura: auraDtoSchema.optional(),
-  description: z.string().optional(),
+  description: localizedTextSchema.optional(),
 })
 
 export const heroDtoSchema: z.ZodType<HeroDto> = z.strictObject({
   id: z.string().regex(ID_PATTERN, 'id 首字符必须是字母，其余为字母 / 数字 / 下划线（可驼峰）'),
-  name: z.string().min(1),
+  name: localizedTextSchema,
   version: z.int().min(1, 'version 必须 ≥ 1'),
   initHp: z.number(),
   initMaxHp: z.number().optional(),
   levelupMaxHp: z.array(z.number()).optional(),
-  description: z.string().optional(),
+  description: localizedTextSchema.optional(),
 })
 
 export const raritiesFileDtoSchema: z.ZodType<RaritiesFileDto> = z.strictObject({
   rarities: z.array(
     z.strictObject({
       id: z.string().min(1),
-      name: z.string().min(1),
+      name: localizedTextSchema,
       color: z.string().min(1),
       frame: z.string().optional(),
       value: z.number().min(0, 'value 不能为负').optional(),
@@ -628,9 +646,9 @@ const engineRangeDtoSchema = z
 
 export const packManifestDtoSchema: z.ZodType<PackManifestDto> = z.strictObject({
   id: z.string().regex(ID_PATTERN, 'id 首字符必须是字母，其余为字母 / 数字 / 下划线（可驼峰）'),
-  name: z.string().min(1),
+  name: localizedTextSchema,
   version: z.int().min(1, 'version 必须 ≥ 1'),
-  description: z.string().optional(),
+  description: localizedTextSchema.optional(),
   builtin: z.boolean().optional(),
   owner: z.string().optional(),
   engineRange: z
@@ -859,7 +877,7 @@ function checkSelector(
   if (typeof select === 'string') {
     if (!SELECTOR_SHORTHANDS.includes(select)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `未知选择器：${select}`, ctx, path, {
+        problem(LOAD_ERROR_CODES.cardSelectorUnknown, `未知选择器：${select}`, ctx, path, {
           suggestion: `封闭词表（13 条）：${SELECTOR_SHORTHANDS.join(' / ')}`,
         }),
       )
@@ -873,7 +891,7 @@ function checkSelector(
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `选择器写法不合法：${message}`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardSelectorInvalid, `选择器写法不合法：${message}`, ctx, path, {
         suggestion: '对照 的封闭词表与查询对象规则',
       }),
     )
@@ -898,7 +916,7 @@ function checkRefText(
   if (dot === -1) {
     if (REF_HEADS.has(ref)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `引用缺少属性名：${ref}`, ctx, path, {
+        problem(LOAD_ERROR_CODES.cardRefMissingField, `引用缺少属性名：${ref}`, ctx, path, {
           suggestion: '形如 self.atk / this.atk（属性名可省略时请直接写字面量）',
         }),
       )
@@ -909,7 +927,7 @@ function checkRefText(
   const tail = ref.slice(dot + 1)
   if (REF_HEADS.has(head) && !STAT_KEY_SET.has(tail)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `引用未知属性：${ref}`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardRefUnknownStat, `引用未知属性：${ref}`, ctx, path, {
         suggestion: `属性键取：${ALL_STAT_KEYS.join(' / ')}`,
       }),
     )
@@ -923,7 +941,7 @@ function checkRefText(
     !IMPLICIT_STAT_DEFAULTS.has(tail)
   ) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `引用未定义的属性：${ref}`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardRefUndefinedStat, `引用未定义的属性：${ref}`, ctx, path, {
         suggestion: `：self.<stat> 引用的字段必须在 stats 中声明（本文件已声明：${[...definedStats].join(' / ') || '（空）'}）；未声明的键运行时读作 0`,
       }),
     )
@@ -953,7 +971,7 @@ function checkVarRef(
         ? '；⚠️ `source` 只在**必有来源卡**的事件里存在（`before_action` / `after_action` / 主动能力）—— 技能与持续效果产生的事件里它**整个不存在**'
         : ''
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `事件参数 ${base} 不存在`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardEventParamUnknown, `事件参数 ${base} 不存在`, ctx, path, {
         severity: 'error',
         suggestion: `本事件可用的参数：${params.join(' / ')}（见《参数表设计.md》§4 / §5）${hint}`,
       }),
@@ -966,7 +984,7 @@ function checkVarRef(
   const kind = VAR_REF_KINDS[base]
   if (kind === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `事件参数 ${base} 不是引用型，不能取属性`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardEventParamNotReference, `事件参数 ${base} 不是引用型，不能取属性`, ctx, path, {
         severity: 'error',
         suggestion: '只有 card_ref / player_ref 型参数能取属性（如 { var: card.atk }）',
       }),
@@ -977,7 +995,7 @@ function checkVarRef(
   const valid = kind === 'card' ? [...CARD_REF_EXTRA_FIELDS, ...STAT_KEYS] : PLAYER_REF_FIELDS
   if (!valid.includes(field)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `事件参数取属性 ${varName} 的字段不合法`, ctx, path, {
+      problem(LOAD_ERROR_CODES.cardEventParamBadField, `事件参数取属性 ${varName} 的字段不合法`, ctx, path, {
         severity: 'error',
         suggestion: `合法字段：${valid.join(' / ')}；写法是**平铺一层**，card.stats.atk 不是合法写法`,
       }),
@@ -1141,7 +1159,7 @@ function checkActionTargetKind(
 
   if (kind === 'player' && CARD_ONLY_PRIMITIVES.includes(action.do)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `${action.do} 不能作用于玩家（该原语只处理卡牌）`, ctx, at, {
+      problem(LOAD_ERROR_CODES.cardActionPlayerTargetForbidden, `${action.do} 不能作用于玩家（该原语只处理卡牌）`, ctx, at, {
         suggestion: '作用于卡牌写 self / all_own_cards / random_enemy_card 等；作用于玩家就换 deal_damage / heal_player / shield',
       }),
     )
@@ -1184,7 +1202,7 @@ function checkAction(
 ): void {
   if (action.target === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, '未写 target', ctx, path, {
+      problem(LOAD_ERROR_CODES.cardActionNoTarget, '未写 target', ctx, path, {
         severity: 'warn',
         suggestion: ' 要求 target 必填；引擎缺省按 self 处理，本轮按 self 执行',
       }),
@@ -1196,20 +1214,20 @@ function checkAction(
   if (action.do === 'enchant') {
     if (action.enchant === undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'do: enchant 缺少 enchant 参数（附魔 id）', ctx, path, {
+        problem(LOAD_ERROR_CODES.cardActionEnchantMissingId, 'do: enchant 缺少 enchant 参数（附魔 id）', ctx, path, {
           suggestion: '：写 { do: enchant, target: <卡牌选择器>, enchant: <本卡 enchantments 里的 id> }',
         }),
       )
     } else if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(action.enchant)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `附魔 id 形状不合法：${action.enchant}`, ctx, [...path, 'enchant'], {
+        problem(LOAD_ERROR_CODES.cardActionEnchantIdInvalid, `附魔 id 形状不合法：${action.enchant}`, ctx, [...path, 'enchant'], {
           suggestion: '：首字符字母，其余字母 / 数字 / 下划线（与其它 id 同规则）',
         }),
       )
     }
   } else if (action.enchant !== undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'enchant 参数只用于 do: enchant', ctx, [...path, 'enchant'], {
+      problem(LOAD_ERROR_CODES.cardActionEnchantUnexpectedParam, 'enchant 参数只用于 do: enchant', ctx, [...path, 'enchant'], {
         suggestion: `：${action.do} 不接受 enchant 参数`,
       }),
     )
@@ -1218,7 +1236,7 @@ function checkAction(
 
   if (action.do === 'gain_stat' && action.stat === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'gain_stat 必须写 stat', ctx, path, {
+      problem(LOAD_ERROR_CODES.cardActionGainStatMissingStat, 'gain_stat 必须写 stat', ctx, path, {
         suggestion: `属性键取：${ALL_STAT_KEYS.join(' / ')}`,
       }),
     )
@@ -1226,13 +1244,13 @@ function checkAction(
   if (action.stat !== undefined && (!STAT_KEY_SET.has(action.stat) || action.do !== 'gain_stat')) {
     if (!STAT_KEY_SET.has(action.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `未知属性键：${action.stat}`, ctx, [...path, 'stat'], {
+        problem(LOAD_ERROR_CODES.cardActionUnknownStatKey, `未知属性键：${action.stat}`, ctx, [...path, 'stat'], {
           suggestion: `属性键取：${ALL_STAT_KEYS.join(' / ')}`,
         }),
       )
     } else if (action.do !== 'gain_stat') {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `stat 仅在 gain_stat 下有效（当前 do: ${action.do}）`, ctx, [
+        problem(LOAD_ERROR_CODES.cardActionStatMisplaced, `stat 仅在 gain_stat 下有效（当前 do: ${action.do}）`, ctx, [
           ...path,
           'stat',
         ], { severity: 'warn' }),
@@ -1241,14 +1259,14 @@ function checkAction(
   }
   if (action.do === 'apply_status' && action.status === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'apply_status 必须写 status', ctx, path, {
+      problem(LOAD_ERROR_CODES.cardActionApplyStatusMissingStatus, 'apply_status 必须写 status', ctx, path, {
         suggestion: `status 取：${CARD_STATUS_KINDS.join(' / ')}`,
       }),
     )
   }
   if (action.status !== undefined && action.do !== 'apply_status') {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `status 仅在 apply_status 下有效（当前 do: ${action.do}）`, ctx, [
+      problem(LOAD_ERROR_CODES.cardActionStatusMisplaced, `status 仅在 apply_status 下有效（当前 do: ${action.do}）`, ctx, [
         ...path,
         'status',
       ], { severity: 'warn' }),
@@ -1288,7 +1306,7 @@ function checkAction(
     checkExprRefs(action.duration, ctx, [...path, 'duration'], issues, definedStats, params)
     if (!dotChannel) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'duration 仅在 gain_stat + 玩家 + burn/poison/regen 通道允许', ctx, [
+        problem(LOAD_ERROR_CODES.cardActionDurationNotAllowed, 'duration 仅在 gain_stat + 玩家 + burn/poison/regen 通道允许', ctx, [
           ...path,
           'duration',
         ], { suggestion: '' }),
@@ -1299,7 +1317,7 @@ function checkAction(
     if (action[key] === undefined) continue
     checkExprRefs(action[key], ctx, [...path, key], issues, definedStats, params)
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `${key} 通道参数引擎尚未落地`, ctx, [...path, key], {
+      problem(LOAD_ERROR_CODES.cardActionChannelUnimplemented, `${key} 通道参数引擎尚未落地`, ctx, [...path, key], {
         severity: 'note',
         suggestion: ' 已登记；本轮加载时忽略该参数',
       }),
@@ -1323,7 +1341,7 @@ function checkAura(
   const mul = aura.mul ?? []
   if (apply.length === 0 && mul.length === 0) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'apply / mul 至少一条非空', ctx, path, {
+      problem(LOAD_ERROR_CODES.cardAuraEmpty, 'apply / mul 至少一条非空', ctx, path, {
         suggestion: '光环必须至少有一个贡献通道',
       }),
     )
@@ -1337,14 +1355,14 @@ function checkAura(
     const entryPath = [...path, 'apply', index]
     if (!STAT_KEY_SET.has(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `未知属性键：${entry.stat}`, ctx, [...entryPath, 'stat'], {
+        problem(LOAD_ERROR_CODES.cardAuraUnknownStatKey, `未知属性键：${entry.stat}`, ctx, [...entryPath, 'stat'], {
           suggestion: `属性键取：${ALL_STAT_KEYS.join(' / ')}`,
         }),
       )
     }
     if (seenApply.has(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `apply 通道内 stat 重复：${entry.stat}`, ctx, entryPath, {
+        problem(LOAD_ERROR_CODES.cardAuraDuplicateStat, `apply 通道内 stat 重复：${entry.stat}`, ctx, entryPath, {
           suggestion: '同一通道内同一 stat 只能写一次',
         }),
       )
@@ -1352,7 +1370,7 @@ function checkAura(
     seenApply.add(entry.stat)
     if (FORBIDDEN_APPLY_STATS.includes(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `apply 通道禁用 stat：${entry.stat}`, ctx, [...entryPath, 'stat'], {
+        problem(LOAD_ERROR_CODES.cardAuraForbiddenStat, `apply 通道禁用 stat：${entry.stat}`, ctx, [...entryPath, 'stat'], {
           suggestion: `apply 禁区：${FORBIDDEN_APPLY_STATS.join(' / ')}`,
         }),
       )
@@ -1361,27 +1379,30 @@ function checkAura(
       issues.push(
         problem(
           LOAD_ERROR_CODES.schemaInvalid,
-          `select 命中玩家时只能用 burn / poison / regen 的固定数值 apply（当前 ${entry.stat}）`,
+          `select 命中玩家时只能用 burn / poison / regen 的数值 apply（当前 ${entry.stat}）`,
           ctx,
           [...entryPath, 'stat'],
           { suggestion: ' 规则 4；玩家侧的 shield / hp / maxHp 一律不支持' },
         ),
       )
     }
+    // 数额：字面量或表达式都行；光环里没有事件上下文 ⇒ 参数表传空表，
+    // 于是 `{ var: ... }` 一律报"事件参数不存在"（与运行期"上场就炸"提前对齐）。
+    checkExprRefs(entry.amount, ctx, [...entryPath, 'amount'], issues, definedStats, [])
   }
 
   for (const [index, entry] of mul.entries()) {
     const entryPath = [...path, 'mul', index]
     if (!STAT_KEY_SET.has(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `未知属性键：${entry.stat}`, ctx, [...entryPath, 'stat'], {
+        problem(LOAD_ERROR_CODES.cardAuraUnknownStatKey, `未知属性键：${entry.stat}`, ctx, [...entryPath, 'stat'], {
           suggestion: `属性键取：${ALL_STAT_KEYS.join(' / ')}`,
         }),
       )
     }
     if (seenMul.has(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `mul 通道内 stat 重复：${entry.stat}`, ctx, entryPath, {
+        problem(LOAD_ERROR_CODES.cardAuraDuplicateStat, `mul 通道内 stat 重复：${entry.stat}`, ctx, entryPath, {
           suggestion: '同一通道内同一 stat 只能写一次',
         }),
       )
@@ -1389,14 +1410,14 @@ function checkAura(
     seenMul.add(entry.stat)
     if (FORBIDDEN_MUL_STATS.includes(entry.stat)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `mul 通道禁用 stat：${entry.stat}`, ctx, [...entryPath, 'stat'], {
+        problem(LOAD_ERROR_CODES.cardAuraForbiddenStat, `mul 通道禁用 stat：${entry.stat}`, ctx, [...entryPath, 'stat'], {
           suggestion: `mul 禁区：${FORBIDDEN_MUL_STATS.join(' / ')}`,
         }),
       )
     }
     if (playersOnly) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'select 命中玩家时一律禁止 mul 通道', ctx, entryPath, {
+        problem(LOAD_ERROR_CODES.cardAuraPlayerMulForbidden, 'select 命中玩家时一律禁止 mul 通道', ctx, entryPath, {
           suggestion: ' 规则 4',
         }),
       )
@@ -1404,7 +1425,7 @@ function checkAura(
     // 容差比较：IEEE754 下 1.1 * 100 === 110.00000000000001，直接比不等会误报合法的一位 / 两位小数
     if (Math.abs(entry.factor * 100 - Math.round(entry.factor * 100)) > 1e-9) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `factor 超过两位小数：${entry.factor}`, ctx, [...entryPath, 'factor'], {
+        problem(LOAD_ERROR_CODES.cardAuraFactorPrecision, `factor 超过两位小数：${entry.factor}`, ctx, [...entryPath, 'factor'], {
           severity: 'warn',
           suggestion: '：factor 保留两位小数',
         }),
@@ -1435,7 +1456,7 @@ function checkEnchantments(
     const path: (string | number)[] = ['enchantments', index]
     if (seen.has(enchant.id)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `附魔 id 卡内重复：${enchant.id}`, ctx, [...path, 'id'], {
+        problem(LOAD_ERROR_CODES.cardEnchantDuplicate, `附魔 id 卡内重复：${enchant.id}`, ctx, [...path, 'id'], {
           suggestion: '：enchantments[].id 必填且卡内唯一（`do: enchant` 按它定位）',
         }),
       )
@@ -1445,7 +1466,7 @@ function checkEnchantments(
     // 显示名：**必填**（缺了只 warn、不拦注册 —— 悬停会回落显示英文 id，属"能跑但观感差"）
     if (enchant.name === undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `附魔「${enchant.id}」没写 name（显示名）`, ctx, [...path, 'name'], {
+        problem(LOAD_ERROR_CODES.cardEnchantNameMissing, `附魔「${enchant.id}」没写 name（显示名）`, ctx, [...path, 'name'], {
           severity: 'warn',
           suggestion: '：写一个中文显示名（悬浮窗"卡名上方"会用它；缺省回落英文 id）',
         }),
@@ -1457,13 +1478,13 @@ function checkEnchantments(
 
     if (enchant.aura === undefined && enchant.stats === undefined && enchant.actions === undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `附魔「${enchant.id}」三块效果全空`, ctx, path, {
+        problem(LOAD_ERROR_CODES.cardEnchantEffectsEmpty, `附魔「${enchant.id}」三块效果全空`, ctx, path, {
           suggestion: '：aura / stats / actions 至少写一块，否则这件附魔没有任何作用',
         }),
       )
     }
     if (enchant.stats !== undefined) {
-      checkStats(enchant.stats, ctx, [...path, 'stats'], issues, { requireAtk: false })
+      checkStats(enchant.stats, ctx, [...path, 'stats'], issues)
     }
     if (enchant.aura !== undefined) checkAura(enchant.aura, ctx, [...path, 'aura'], issues, merged)
     for (const [actionIndex, action] of (enchant.actions ?? []).entries()) {
@@ -1477,29 +1498,21 @@ function checkStats(
   ctx: ValidationContext,
   path: readonly (string | number)[],
   issues: ValidationError[],
-  options: { readonly requireAtk: boolean },
 ): void {
   for (const key of Object.keys(stats)) {
     if (CARD_STAT_SET.has(key)) continue
     // 宽松处理：引擎按名读取属性，未登记的键不生效 ⇒ 只提示，不拦注册（防拼错属性名）
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `未知属性键：${key}`, ctx, [...path, key], {
+      problem(LOAD_ERROR_CODES.cardStatsUnknownKey, `未知属性键：${key}`, ctx, [...path, key], {
         severity: 'warn',
         suggestion: `属性键取：${STAT_KEYS.join(' / ')}`,
-      }),
-    )
-  }
-  if (options.requireAtk && stats.atk === undefined) {
-    issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'stats.atk 必填', ctx, [...path, 'atk'], {
-        suggestion: '：atk 是卡牌唯一必填属性（不内置普攻）',
       }),
     )
   }
   const atk = stats.atk
   if (atk !== undefined && atk < 0) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `stats.atk 不能为负：${atk}`, ctx, [...path, 'atk'], {
+      problem(LOAD_ERROR_CODES.cardStatsAtkNegative, `stats.atk 不能为负：${atk}`, ctx, [...path, 'atk'], {
         suggestion: '：atk ≥ 0',
       }),
     )
@@ -1507,7 +1520,7 @@ function checkStats(
   const speed = stats.speed
   if (speed !== undefined && !(speed > 0)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `stats.speed 必须 > 0（当前 ${speed}）`, ctx, [...path, 'speed'], {
+      problem(LOAD_ERROR_CODES.cardStatsSpeedNonPositive, `stats.speed 必须 > 0（当前 ${speed}）`, ctx, [...path, 'speed'], {
         suggestion: '：speed 缺省 1',
       }),
     )
@@ -1515,7 +1528,7 @@ function checkStats(
   const cdp = stats.cdp
   if (cdp !== undefined && !(cdp > 0)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `stats.cdp 必须 > 0（当前 ${cdp}）`, ctx, [...path, 'cdp'], {
+      problem(LOAD_ERROR_CODES.cardStatsCdpNonPositive, `stats.cdp 必须 > 0（当前 ${cdp}）`, ctx, [...path, 'cdp'], {
         suggestion: '：cdp 缺省 100（百分比系数）',
       }),
     )
@@ -1530,7 +1543,7 @@ function checkTrigger(
 ): void {
   if (!KNOWN_EVENT_SET.has(trigger.event)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `引擎当前未广播时机：${trigger.event}`, ctx, [...path, 'event'], {
+      problem(LOAD_ERROR_CODES.cardAbilityEventNotBroadcast, `引擎当前未广播时机：${trigger.event}`, ctx, [...path, 'event'], {
         severity: 'warn',
         suggestion: `已落地的时机：${KNOWN_EVENTS.join(' / ')}；其余时机该被动不会触发`,
       }),
@@ -1548,7 +1561,7 @@ function checkAbility(
   if (ability.kind === 'passive') {
     if (ability.trigger === undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'passive 能力必须写 trigger', ctx, path, {
+        problem(LOAD_ERROR_CODES.cardAbilityPassiveNoTrigger, 'passive 能力必须写 trigger', ctx, path, {
           suggestion: '：被动必须有触发时机',
         }),
       )
@@ -1557,7 +1570,7 @@ function checkAbility(
     }
     if (ability.everyN !== undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'everyN 仅 active 能力可用', ctx, [...path, 'everyN'], {
+        problem(LOAD_ERROR_CODES.cardAbilityEveryNNotActive, 'everyN 仅 active 能力可用', ctx, [...path, 'everyN'], {
           severity: 'warn',
         }),
       )
@@ -1565,14 +1578,14 @@ function checkAbility(
   } else {
     if (ability.trigger !== undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'active 能力不得写 trigger', ctx, [...path, 'trigger'], {
+        problem(LOAD_ERROR_CODES.cardAbilityActiveHasTrigger, 'active 能力不得写 trigger', ctx, [...path, 'trigger'], {
           suggestion: '：主动效果不得写 trigger（用 everyN 控制第 N 次行动）',
         }),
       )
     }
     if (ability.priority !== undefined) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, 'priority 仅 passive 能力可用', ctx, [...path, 'priority'], {
+        problem(LOAD_ERROR_CODES.cardAbilityPriorityNotPassive, 'priority 仅 passive 能力可用', ctx, [...path, 'priority'], {
           severity: 'warn',
         }),
       )
@@ -1639,9 +1652,9 @@ export function validateCard(
     )
   }
 
-  checkStats(dto.stats, ctx, ['stats'], issues, { requireAtk: true })
+  checkStats(dto.stats ?? {}, ctx, ['stats'], issues)
   // self.<stat> / this.<stat> 引用的字段必须是本卡 stats 里声明过的键
-  const definedStats = new Set<string>(Object.keys(dto.stats))
+  const definedStats = new Set<string>(Object.keys(dto.stats ?? {}))
 
   // 品阶链（从最低到最高）；**只用于 `inheritOverride` 的分段校验**（见下方）
   const rarityChain = options.rarityChain === undefined ? undefined : [...options.rarityChain]
@@ -1651,7 +1664,7 @@ export function validateCard(
 
   if (registeredRarities !== undefined && !registeredRarities.has(dto.rarity)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `未注册的品阶：${dto.rarity}`, ctx, ['rarity'], {
+      problem(LOAD_ERROR_CODES.cardRarityUnknown, `未注册的品阶：${dto.rarity}`, ctx, ['rarity'], {
         suggestion: `引擎内置品阶：${BUILTIN_RARITY_IDS.join(' / ')}；自定义品阶请在包内 rarities.yml 登记`,
       }),
     )
@@ -1678,7 +1691,7 @@ export function validateCard(
   for (const [index, ability] of abilities.entries()) {
     if (seenAbilityIds.has(ability.id)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `ability id 卡内重复：${ability.id}`, ctx, ['abilities', index, 'id'], {
+        problem(LOAD_ERROR_CODES.cardAbilityDuplicateId, `ability id 卡内重复：${ability.id}`, ctx, ['abilities', index, 'id'], {
           suggestion: '：abilities[].id 必填且卡内唯一',
         }),
       )
@@ -1690,7 +1703,7 @@ export function validateCard(
   const hasActiveAbility = abilities.some((ability) => ability.kind === 'active')
   if (dto.cooldown === -1 && hasActiveAbility) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, 'cooldown = -1（纯被动物品）却定义了 active 能力', ctx, ['cooldown'], {
+      problem(LOAD_ERROR_CODES.cardCooldownPassiveWithActive, 'cooldown = -1（纯被动物品）却定义了 active 能力', ctx, ['cooldown'], {
         severity: 'warn',
         suggestion: '纯被动物品的主动能力不会进入行动条',
       }),
@@ -1698,7 +1711,7 @@ export function validateCard(
   }
   if (dto.cooldown !== -1 && !hasActiveAbility) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, '未定义 active 能力，但 cooldown 不是 -1', ctx, ['cooldown'], {
+      problem(LOAD_ERROR_CODES.cardCooldownActiveMissing, '未定义 active 能力，但 cooldown 不是 -1', ctx, ['cooldown'], {
         severity: 'warn',
         suggestion: '没有主动能力的卡牌建议写 cooldown: -1',
       }),
@@ -1887,7 +1900,7 @@ export function validateSkill(
     )
   }
 
-  if (dto.stats !== undefined) checkStats(dto.stats, ctx, ['stats'], issues, { requireAtk: false })
+  if (dto.stats !== undefined) checkStats(dto.stats, ctx, ['stats'], issues)
   // （：self.<stat> 引用的字段必须在本技能 stats 中声明）
   const definedStats = new Set<string>(Object.keys(dto.stats ?? {}))
 
@@ -1897,7 +1910,7 @@ export function validateSkill(
     const registered = new Set(options.registeredRarities)
     if (!registered.has(dto.rarity)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `未注册的品阶：${dto.rarity}`, ctx, ['rarity'], {
+        problem(LOAD_ERROR_CODES.cardRarityUnknown, `未注册的品阶：${dto.rarity}`, ctx, ['rarity'], {
           suggestion: `引擎内置品阶：${BUILTIN_RARITY_IDS.join(' / ')}；自定义品阶请在包内 rarities.yml 登记`,
         }),
       )
@@ -1907,14 +1920,14 @@ export function validateSkill(
   const actions = dto.actions ?? []
   if (actions.length === 0 && dto.aura === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, '既无 actions 又无 aura', ctx, [], {
+      problem(LOAD_ERROR_CODES.cardSkillNoEffect, '既无 actions 又无 aura', ctx, [], {
         suggestion: '：纯光环技能可省略 actions，但两者不能同时为空',
       }),
     )
   }
   if (dto.trigger === undefined && dto.aura === undefined) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, '既未写 trigger 也未写 aura', ctx, [], {
+      problem(LOAD_ERROR_CODES.cardSkillInert, '既未写 trigger 也未写 aura', ctx, [], {
         severity: 'note',
         suggestion: '该技能不进触发栈、整局不结算',
       }),
@@ -1937,7 +1950,7 @@ export function validateSkill(
       if (hero === 'common' || hero === 'sp') continue
       if (!known.has(hero)) {
         issues.push(
-          problem(LOAD_ERROR_CODES.schemaInvalid, `heroes 引用了未注册的英雄 id：${hero}`, ctx, ['heroes', index], {
+          problem(LOAD_ERROR_CODES.cardSkillHeroUnknown, `heroes 引用了未注册的英雄 id：${hero}`, ctx, ['heroes', index], {
             severity: 'warn',
             suggestion: '英雄可能来自未加载的卡包；common / sp 是保留字',
           }),
@@ -1954,7 +1967,7 @@ export function validateHero(dto: HeroDto, ctx: ValidationContext): readonly Val
   const issues: ValidationError[] = []
   if (!(dto.initHp > 0)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `initHp 必须 > 0（当前 ${dto.initHp}）`, ctx, ['initHp'], {
+      problem(LOAD_ERROR_CODES.heroInitHpNonPositive, `initHp 必须 > 0（当前 ${dto.initHp}）`, ctx, ['initHp'], {
         suggestion: '',
       }),
     )
@@ -1962,7 +1975,7 @@ export function validateHero(dto: HeroDto, ctx: ValidationContext): readonly Val
   const maxHp = dto.initMaxHp
   if (maxHp !== undefined && maxHp < dto.initHp) {
     issues.push(
-      problem(LOAD_ERROR_CODES.schemaInvalid, `initMaxHp（${maxHp}）小于 initHp（${dto.initHp}）`, ctx, ['initMaxHp'], {
+      problem(LOAD_ERROR_CODES.heroMaxHpLessThanHp, `initMaxHp（${maxHp}）小于 initHp（${dto.initHp}）`, ctx, ['initMaxHp'], {
         severity: 'warn',
         suggestion: 'initMaxHp 缺省 = initHp',
       }),
@@ -1972,7 +1985,7 @@ export function validateHero(dto: HeroDto, ctx: ValidationContext): readonly Val
   for (const [index, value] of (dto.levelupMaxHp ?? []).entries()) {
     if (value < previous) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `levelupMaxHp 应单调不减（第 ${index} 项 ${value} < 前一项 ${previous}）`, ctx, [
+        problem(LOAD_ERROR_CODES.heroLevelupNotMonotonic, `levelupMaxHp 应单调不减（第 ${index} 项 ${value} < 前一项 ${previous}）`, ctx, [
           'levelupMaxHp',
           index,
         ], { severity: 'warn' }),
@@ -1993,7 +2006,7 @@ export function validateRaritiesFile(
   for (const [index, rarity] of dto.rarities.entries()) {
     if (ids.has(rarity.id)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `品阶 id 重复：${rarity.id}`, ctx, ['rarities', index, 'id']),
+        problem(LOAD_ERROR_CODES.packRarityDuplicate, `品阶 id 重复：${rarity.id}`, ctx, ['rarities', index, 'id']),
       )
     }
     ids.add(rarity.id)
@@ -2001,7 +2014,7 @@ export function validateRaritiesFile(
   for (const [index, id] of (dto.upgrade ?? []).entries()) {
     if (!ids.has(id)) {
       issues.push(
-        problem(LOAD_ERROR_CODES.schemaInvalid, `upgrade 引用了未定义的品阶 id：${id}`, ctx, ['upgrade', index], {
+        problem(LOAD_ERROR_CODES.packRarityUpgradeUnknown, `upgrade 引用了未定义的品阶 id：${id}`, ctx, ['upgrade', index], {
           suggestion: '：upgrade 元素须是已定义的品阶 id',
         }),
       )
@@ -2185,7 +2198,7 @@ export function validatePackManifest(
 
   if (dto.owner !== undefined && dto.owner !== 'common' && !ID_PATTERN.test(dto.owner)) {
     issues.push(
-      problem(LOAD_ERROR_CODES.packManifest, `owner 取值须是 hero_id 或 common（当前 ${dto.owner}）`, ctx, ['owner'], {
+      problem(LOAD_ERROR_CODES.packOwnerInvalid, `owner 取值须是 hero_id 或 common（当前 ${dto.owner}）`, ctx, ['owner'], {
         severity: 'warn',
       }),
     )

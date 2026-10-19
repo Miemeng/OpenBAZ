@@ -1,0 +1,23 @@
+# 庇护所（shelter）· 中 · 白银 —— 只有一条主动：加护盾
+#
+# 教学点：与「草药瓶」**结构完全对称**，只是把 `heal_player` 换成 `shield` —— 新手最容易看懂的对照。
+id: shelter
+name: 庇护所
+version: 2
+size: medium
+cooldown: 3.50
+rarity: silver
+description: 行动条满时给友方玩家提供「护盾」点护盾。
+
+stats:
+  shield: 20
+
+tags: [building]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: shield
+        target: own_player
+        amount: { ref: self.shield }

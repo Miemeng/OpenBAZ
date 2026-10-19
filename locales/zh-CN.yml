@@ -1,0 +1,21 @@
+# 语言表 · zh-CN（简体中文）
+#
+# 定位：**语言表是纯数据** —— 引擎不读文件，由宿主读成对象后经 `BattleOptions.locale` 注入
+#       （见 `engine/types.ts` 的 `LocaleTable`）。缺表 / 缺键 ⇒ 逐条回落引擎内置中文。
+#
+# 纪律（与 `BattleState.messages` 同一套）：**不进确定性 hash、不消耗 rng、不改变任何判定**；
+#       换语言只改文本，不改对局结果。
+#
+# 占位符：`{参数名}` 取自 `LogMessage.data`；`{value}` 是**派生参数**（光环增减量的带符号显示，
+#         由 `engine/log.ts` 现算：平铺 `+3` / `-2`，倍率 `×1.5`）。
+#
+# 本批（批 67-A）只收**引擎的 7 条消息码**；界面文案与数据文案（卡名 / 描述）在后续批次接入。
+lang: zh-CN
+messages:
+  skill.no_trigger_no_aura: "技能 {skill} 既没有触发器（trigger）也没有光环（aura），整局不会有任何结算"
+  selector.type_mismatch: "选择器 {selector} 的目标类型不匹配：{detail}（对局已中止）"
+  selector.sort_key_ignored: "{text}"
+  aura.dot_warning: "光环向 {target} 施加持续效果 {dot}（暂定允许，请确认是否为本意）"
+  aura.entered: "光环生效：{target_name} 的 {stat} {value}"
+  aura.exited: "光环退场：{target_name} 的 {stat} {value}"
+  stack_limit.truncated: "{stat} 已达层数上限 {limit}，本次叠加被截断"

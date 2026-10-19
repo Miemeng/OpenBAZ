@@ -16,7 +16,7 @@
 // （`state.ts` 不 import 本文件，空快照与拷贝写在 `state.ts` 内），故无循环依赖。
 import { activeEnchantOf, opponentOf } from './state.ts'
 import { selectTargets } from './selectors.ts'
-import { evaluateCardFilter, evaluateCondition, type EvalContext } from './expr.ts'
+import { evaluateCardFilter, evaluateCondition, evaluateExpr, type EvalContext } from './expr.ts'
 import type {
   AuraDef,
   AuraEntry,
@@ -192,6 +192,9 @@ function makeAuraContext(
     },
     ownPlayer: state.players[side],
     enemyPlayer: state.players[opponentOf(side)],
+    // 光环定义阶段：数额里的引用一律读"卡面 + buff"（不含光环层），
+    // 否则"数额 = 自身攻击"会逐帧自增、并且读到上一帧快照而随帧序漂移。
+    withoutAura: true,
   }
 }
 
@@ -306,7 +309,7 @@ function playerEntry(
  * 求值一条光环并并入累积器。
  *
  * 顺序：定义校验 → `condition` → `select` → 卡牌通道（平铺、再倍率）→
- * 玩家通道（只接受三 DOT 的固定数值 `apply`）。
+ * 玩家通道（只接受三 DOT 的**数值** `apply` —— 字面量或表达式都行）。
  */
 function accumulate(
   state: BattleState,
@@ -322,12 +325,20 @@ function accumulate(
   if (def.condition !== undefined && !evaluateCondition(def.condition, context)) return
 
   const selection = selectTargets(def.select, context)
-  const apply = def.apply ?? []
+  // 平铺数额在**来源上下文**里每帧只求值一次（与目标无关）⇒ 选中几张卡不影响 rng 与结果；
+  // 表达式里的引用按 `withoutAura` 口径读（见 `makeAuraContext`）。
+  const flat = (def.apply ?? []).map((item) => {
+    const amount = evaluateExpr(item.amount, context)
+    if (!Number.isFinite(amount)) {
+      throw new Error(`光环 ${source.source} 的 apply ${item.stat} 数额不是有限数：${String(amount)}`)
+    }
+    return { stat: item.stat, amount }
+  })
   const mul = def.mul ?? []
 
   // —— 卡牌通道：先平铺（apply）再乘倍率（mul），两者可写同一个 stat
   for (const boardCard of selection.cards) {
-    for (const item of apply) {
+    for (const item of flat) {
       totalsFor(accumulator, boardCard.instanceId, item.stat).flat += item.amount
       accumulator.entries.push(cardEntry(source, 'apply', item.stat, item.amount, boardCard))
     }
@@ -338,7 +349,7 @@ function accumulate(
     }
   }
 
-  // —— 玩家通道：只接受 burn / poison / regen 的固定数值 apply
+  // —— 玩家通道：只接受 burn / poison / regen 的数值 apply
   if (selection.players.length === 0) return
   if (mul.length > 0) {
     failPlayerSide(
@@ -350,13 +361,13 @@ function accumulate(
   }
   for (const targetSide of selection.players) {
     const target = state.players[targetSide]
-    for (const item of apply) {
+    for (const item of flat) {
       if (!DOT_KINDS.has(item.stat)) {
         failPlayerSide(
           state,
           emitMessage,
           source,
-          `玩家侧只接受 burn / poison / regen 的固定数值 apply，收到 ${item.stat}`,
+          `玩家侧只接受 burn / poison / regen 的数值 apply，收到 ${item.stat}`,
         )
       }
       const key = `${targetSide}:${item.stat}`

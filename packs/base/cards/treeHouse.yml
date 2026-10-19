@@ -1,0 +1,32 @@
+# 树屋（treeHouse）· 大（占 3 格）· 钻石 —— 一条主动 + **一个**被动触发器
+#
+# 教学点：一条主动（加护盾）+ 一条被动（有玩家受伤就回血）；`on_player_damaged` 是**时机词**。
+id: treeHouse
+name: 树屋
+version: 2
+size: large
+cooldown: 5.00
+rarity: diamond
+description: 行动条满时提供「护盾」点护盾；有玩家受伤时，回复「治疗」点生命。
+
+stats:
+  shield: 40
+  heal: 5
+
+tags: [building]
+
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: shield
+        target: own_player
+        amount: { ref: self.shield }
+
+  - id: 2
+    kind: passive
+    trigger: { event: on_player_damaged }
+    actions:
+      - do: heal_player
+        target: own_player
+        amount: { ref: self.heal }

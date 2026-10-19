@@ -194,6 +194,35 @@ describe('validateCard（语义层）', () => {
     expect(issues.some((issue) => issue.message.includes('apply 通道禁用 stat：speed'))).toBe(true)
   })
 
+  it('光环：apply 数额可以写表达式（`{ ref: self.atk }` / `{ add: [...] }`）', () => {
+    const objects = `${CARD_YAML}aura:
+  select: all_own_cards
+  apply:
+    - stat: atk
+      amount:
+        add:
+          - ref: self.atk
+          - 2
+`
+    const parsed = parseCard(objects)
+    expect(errorsOf(validateCard(parsed.dto, parsed.ctx, { fileName: 'c1' }))).toEqual([])
+
+    // 裸字符串写法（与 `{ ref: self.atk }` 等价）同样合法
+    const bare = parseCard(`${CARD_YAML}aura:\n  select: all_own_cards\n  apply:\n    - { stat: atk, amount: self.atk }\n`)
+    expect(errorsOf(validateCard(bare.dto, bare.ctx, { fileName: 'c1' }))).toEqual([])
+  })
+
+  it('光环：数额里引用事件参数 ⇒ error（光环没有事件上下文）', () => {
+    const text = `${CARD_YAML}aura:
+  select: all_own_cards
+  apply:
+    - { stat: atk, amount: { var: amount } }
+`
+    const { dto, ctx } = parseCard(text)
+    const issues = validateCard(dto, ctx, { fileName: 'c1' })
+    expect(issues.some((issue) => issue.message.includes('事件参数 amount 不存在'))).toBe(true)
+  })
+
   it('未注册品阶 ⇒ 错误（只在给出 registeredRarities 时校验）', () => {
     const { dto, ctx } = parseCard(CARD_YAML)
     const issues = validateCard(dto, ctx, {
@@ -1140,5 +1169,150 @@ abilities:
     const dto = deckOf('hero: testHeroA\ncards:\n  - id: ironWall\n    slot: 1\n    enchant: aegis\n')
     const resolved = resolveDeck(dto, registry, 'd')
     expect(resolved?.placements[0]?.enchant).toBe('aegis')
+  })
+})
+
+// 校验码细分（批 67-B/C/D）：这几条钉住"码本身"，不再是"只有文案、码全一样"。
+// 只挑**稳定、不受后续文案改动影响**的几条；其余语义码由文案断言间接覆盖。
+describe('校验码细分（码级断言）', () => {
+  const codesOfCard = (yaml: string, options: Parameters<typeof validateCard>[2] = {}): readonly string[] => {
+    const { dto, ctx } = parseCard(yaml)
+    return validateCard(dto, ctx, options).map((issue) => issue.code)
+  }
+
+  it('未登记的品阶 ⇒ card.rarity.unknown', () => {
+    const yaml = CARD_YAML.replace('rarity: bronze', 'rarity: mythic')
+    expect(codesOfCard(yaml, { registeredRarities: ['bronze', 'silver'] })).toContain('card.rarity.unknown')
+  })
+
+  it('stats.speed ≤ 0 ⇒ card.stats.speed_non_positive', () => {
+    const yaml = CARD_YAML.replace('  atk: 10', '  atk: 10\n  speed: 0')
+    expect(codesOfCard(yaml)).toContain('card.stats.speed_non_positive')
+  })
+
+  it('stats 写了未登记键 ⇒ card.stats.unknown_key', () => {
+    const yaml = CARD_YAML.replace('  atk: 10', '  atk: 10\n  bogus: 3')
+    expect(codesOfCard(yaml)).toContain('card.stats.unknown_key')
+  })
+
+  it('同卡附魔 id 重复 ⇒ card.enchant.duplicate', () => {
+    const yaml = `${CARD_YAML}enchantments:
+  - id: aegis
+    name: 壁垒
+    stats: { shield: 2 }
+  - id: aegis
+    name: 壁垒二号
+    stats: { shield: 3 }
+`
+    expect(codesOfCard(yaml)).toContain('card.enchant.duplicate')
+  })
+
+  it('动作没写 target ⇒ card.action.no_target', () => {
+    const yaml = `id: c1
+name: 试验卡
+version: 1
+size: small
+cooldown: 1.50
+rarity: bronze
+stats:
+  atk: 10
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        amount: self.atk
+`
+    expect(codesOfCard(yaml)).toContain('card.action.no_target')
+  })
+
+  it('stats 整表可以省略（atk 不再必填），映射为空表', () => {
+    const yaml = `id: c1
+name: 试验卡
+version: 1
+size: small
+cooldown: 1.50
+rarity: bronze
+`
+    const { dto, ctx } = parseCard(yaml)
+    expect(errorsOf(validateCard(dto, ctx))).toEqual([])
+    expect(mapCard(dto).stats).toEqual({})
+  })
+
+  it('省略 stats 后引用 self.atk ⇒ card.ref.undefined_stat', () => {
+    const yaml = `id: c1
+name: 试验卡
+version: 1
+size: small
+cooldown: 1.50
+rarity: bronze
+abilities:
+  - id: 1
+    kind: active
+    actions:
+      - do: deal_damage
+        target: enemy_player
+        amount: self.atk
+`
+    expect(codesOfCard(yaml)).toContain('card.ref.undefined_stat')
+  })
+})
+
+// 内联多语言文本（《审阅.md》§AG：AG.1 = A）：裸字符串 = 默认语言；对象按目标语言解析。
+describe('内联多语言文本（AG.1 = A）', () => {
+  it('裸字符串 = 默认语言（现有数据零迁移）', () => {
+    const { dto } = parseCard(CARD_YAML)
+    expect(mapCard(dto).name).toBe('试验卡')
+  })
+
+  it('对象按目标语言解析；没有该语言 ⇒ 回落默认语言', () => {
+    const yaml = CARD_YAML.replace('name: 试验卡', "name: { 'zh-CN': 试验卡, en: Test Card }")
+    const { dto } = parseCard(yaml)
+    expect(mapCard(dto, { locale: 'en' }).name).toBe('Test Card')
+    expect(mapCard(dto).name).toBe('试验卡')
+    expect(mapCard(dto, { locale: 'fr' }).name).toBe('试验卡')
+  })
+
+  it('多语言对象缺默认语言 ⇒ 结构层拒绝，并说清原因', () => {
+    const yaml = CARD_YAML.replace('name: 试验卡', 'name: { en: Test Card }')
+    const ctx = contextOf(yaml, 'c1.yml')
+    const parsed = cardDtoSchema.safeParse(parseYamlDocument(yaml, 'c1.yml').value)
+    expect(parsed.success).toBe(false)
+    const issues = parsed.success ? [] : issuesToErrors(parsed.error.issues, ctx)
+    expect(issues.some((issue) => issue.message.includes('默认语言'))).toBe(true)
+  })
+})
+
+// 结构化回显（AG.6 = A）：主动行不再重复"行动条充满时"，但续用文本必须逐字符保持旧样。
+describe('summaryLines（结构化回显）', () => {
+  it('主动行的 trigger 不再出现「行动条充满时」；summary() 文本仍保留（CLI 不变）', () => {
+    const registry = liveRegistry()
+    const withActive = registry
+      .getAll()
+      .cards.filter((card) => (card.abilities ?? []).some((ability) => ability.kind === 'active'))
+    expect(withActive.length).toBeGreaterThan(0)
+
+    for (const card of withActive.slice(0, 5)) {
+      for (const line of registry.summaryLines(card.id).filter((entry) => entry.kind === 'active')) {
+        expect(line.trigger ?? '').not.toContain('行动条充满时')
+        expect(line.result).not.toBeNull()
+      }
+      expect(registry.summary(card.id).some((text) => text.includes('行动条充满时'))).toBe(true)
+    }
+  })
+
+  it('主动行的附加信息（每 N 次 / 条件）仍留在 trigger 里', () => {
+    const registry = liveRegistry()
+    const lines = registry.summaryLines('ironWall')
+    const withEvery = lines.find((line) => line.kind === 'active' && (line.trigger ?? '').includes('每 '))
+    // ironWall 的主动是「每 3 次行动套盾」⇒ trigger 只剩"（每 3 次）"
+    expect(withEvery?.trigger).toContain('（每 3 次）')
+    expect(withEvery?.text).toContain('行动条充满时（每 3 次）')
+  })
+
+  it('被动行仍带「时机 …」', () => {
+    const registry = liveRegistry()
+    const passive = registry.summaryLines('ironWall').find((line) => line.kind === 'passive')
+    expect(passive?.trigger?.startsWith('时机 ')).toBe(true)
   })
 })

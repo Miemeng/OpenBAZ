@@ -1,0 +1,13 @@
+# 角色 —— 守卫（guard）
+# 目录名 / 文件名 / 文件内 id 三者必须逐字一致：heroes/guard/guard.yml
+
+id: guard
+name: 守卫
+version: 1
+
+initHp: 350              # 初始血量：比盗贼高 50
+initMaxHp: 400           # 上限 400 —— 演示"血量覆盖"与上限的关系
+levelupMaxHp: [100, 200, 300, 400]
+
+description: 基础角色：初始 350 / 上限 400，比盗贼更耐打但开局不满血。
+# 头像：images/heroes/guard/avatar.png（文件名固定 avatar.png；缺失由客户端回落首字色块）

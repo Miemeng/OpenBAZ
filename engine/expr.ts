@@ -8,10 +8,9 @@
 //   enemy_player.hp / hp_pct / shield    敌方玩家
 //   { var: <name> }         本次触发事件携带的参数
 //   { count: <Selector> }   满足选择器的目标数量
-import { effectiveDotStacks, effectiveStat, speedMultiplier } from './state.ts'
+import { effectiveDotStacks, effectiveStat, preAuraDotStacks, preAuraStat, speedMultiplier } from './state.ts'
 import { selectTargets, type FilterResolver, type SelectContext } from './selectors.ts'
 import type {
-  BattleState,
   BoardCard,
   Condition,
   DotKind,
@@ -93,6 +92,14 @@ export interface EvalContext extends SelectContext {
    * 阈值只影响"看不看得见"，绝不参与判定（不消耗 rng、不写判定字段）。
    */
   readonly logLevel?: LogLevel
+  /**
+   * **光环定义阶段**的读数口径（只由 `engine/aura.ts` 置 `true`）。
+   *
+   * 为 `true` 时，`self.<stat>` / `own_player.burn` 这类引用一律走**不含光环层**的读数
+   * （`preAuraStat` / `preAuraDotStacks`）：光环的数额不能由其它光环加成后再回头影响自己
+   * （否则逐帧自增），也不能读上一帧快照（否则随帧序漂移）。
+   */
+  readonly withoutAura?: boolean
   readonly ownPlayer: PlayerState
   readonly enemyPlayer: PlayerState
 }
@@ -132,7 +139,9 @@ function cardFieldOf(boardCard: BoardCard, name: string, context: EvalContext): 
   if (name === 'cooldown') return boardCard.card.cooldown
   if (name === 'multicast') return boardCard.card.multicast ?? 1
   if (name === 'slot_index') return boardCard.slot - 1
-  return effectiveStat(context.state, boardCard, name)
+  return context.withoutAura === true
+    ? preAuraStat(boardCard, name)
+    : effectiveStat(context.state, boardCard, name)
 }
 
 /** `self.<name>` 求值。有来源卡走卡牌；无来源卡但有 stats（技能）走技能 stats。 */
@@ -165,9 +174,11 @@ function resolveSelfRef(name: string, context: EvalContext): number {
  * 灼烧层数是 唯一保留小数的累加器，**对外读取一律四舍五入取整**
  * （条件比较也是对外读取，否则 `burn >= 1` 会因为 0.8 层而失真）。
  */
-function dotStacks(state: BattleState, player: PlayerState, field: string): number {
+function dotStacks(context: EvalContext, player: PlayerState, field: string): number {
   const kind: DotKind = field === 'burn' ? 'burn' : field === 'poison' ? 'poison' : 'regen'
-  return effectiveDotStacks(state, player, kind)
+  return context.withoutAura === true
+    ? preAuraDotStacks(player, kind)
+    : effectiveDotStacks(context.state, player, kind)
 }
 
 /**
@@ -192,7 +203,7 @@ function resolveThisRef(name: string, context: EvalContext): number {
 
   if (typeof candidate === 'number') {
     // `zone: player` 的候选：沿用玩家侧封闭字段表（与 own_player.<field> 同一实现）
-    return resolvePlayerRef(context.state, context.state.players[candidate], name)
+    return resolvePlayerRef(context, context.state.players[candidate], name)
   }
 
   if (candidate !== undefined) {
@@ -257,10 +268,10 @@ function resolveRef(ref: string, context: EvalContext): number {
   if (ref === 'enemy_cards_on_board') return countCards(context, 'enemy')
 
   if (ref.startsWith('own_player.')) {
-    return resolvePlayerRef(context.state, context.ownPlayer, ref.slice('own_player.'.length))
+    return resolvePlayerRef(context, context.ownPlayer, ref.slice('own_player.'.length))
   }
   if (ref.startsWith('enemy_player.')) {
-    return resolvePlayerRef(context.state, context.enemyPlayer, ref.slice('enemy_player.'.length))
+    return resolvePlayerRef(context, context.enemyPlayer, ref.slice('enemy_player.'.length))
   }
   throw new Error(`未知引用：${ref}`)
 }
@@ -324,7 +335,7 @@ function resolveVarValue(name: string, context: EvalContext): ExprValue {
       return { kind: 'number', value: cardFieldOf(subject, field, context) }
     }
     if (isPlayerStateValue(subject)) {
-      return { kind: 'number', value: resolvePlayerRef(context.state, subject, field) }
+      return { kind: 'number', value: resolvePlayerRef(context, subject, field) }
     }
     throw new Error(`事件参数 ${base} 不是卡牌 / 玩家引用，不能用 ${name} 取属性`)
   }
@@ -363,7 +374,7 @@ function countCards(context: EvalContext, whose: 'own' | 'enemy' | 'both'): numb
   return selectTargets(whose === 'own' ? 'all_own_cards' : 'all_enemy_cards', context).cards.length
 }
 
-function resolvePlayerRef(state: BattleState, player: PlayerState, field: string): number {
+function resolvePlayerRef(context: EvalContext, player: PlayerState, field: string): number {
   switch (field) {
     case 'hp':
       return player.hp
@@ -377,7 +388,7 @@ function resolvePlayerRef(state: BattleState, player: PlayerState, field: string
     case 'burn':
     case 'poison':
     case 'regen':
-      return dotStacks(state, player, field)
+      return dotStacks(context, player, field)
     default:
       throw new Error(`未知玩家引用：${field}（可用：hp / max_hp / hp_pct / shield / burn / poison / regen）`)
   }

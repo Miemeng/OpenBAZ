@@ -1,7 +1,7 @@
 # ============================================================
 # 卡牌模板（**完整档**：每个字段都写出来，按需删改）
 # 复制 → 改名成 <卡牌id>.yml（文件名 = 文件内 id，本模板用 myCard）
-# 字段定义见 / ；命名口径：**字段名与 id 都是驼峰**，
+# 字段定义见《YAML 数据格式规范》；命名口径：**字段名与 id 都是驼峰**，
 #   而**封闭词表的值仍小写下划线**（deal_damage / enemy_player / on_player_damaged …）
 # ============================================================
 
@@ -86,7 +86,7 @@ abilities:
 
 # ---------- 光环 aura（选填；与 abilities / enchant 平级、不占 kind）----------
 # 卡牌在场期间**持续对外**施加的只读数值修饰（派生态：不落状态、无层数、无时长；来源离场下一帧失效）。
-# 结构与口径的唯一权威 = ；字段定义见。
+# 结构与口径见《YAML 数据格式规范》的光环一节。
 # 要点：select 必填；apply / mul 至少一条；**数值位一律写字面量**；speed 与 haste / slow / freeze 禁止；
 #       玩家侧只接受 burn / poison / regen 的固定数值 apply（玩家护盾与任何倍率都会抛错中止对局）。
 #
@@ -121,18 +121,20 @@ abilities:
 # 时机词表
 #
 # ⚠️ 写 `trigger: { event: … }` 前务必看清两栏：
-#   ✅ 已落地 = **引擎真的会广播**，可以放心写；
+#   ✅ 已广播 = **引擎真的会发**，可以放心写；
 #   ⏳ 未广播 = 词典里有、但引擎**目前没有广播点** ⇒ 能过校验（只报一条 warn），但**整局不会结算**。
 #
-# ---------- ✅ 已落地（3 词）----------
+# ---------- ✅ 已广播（15 词）----------
 #   battle_start          摆盘完成、首个触发帧之前，广播一次
 #   after_action          任意卡牌主动行动完成之后（别名 on_action，统一写 after_action）
 #   on_player_damaged     任一玩家受到实际伤害结算后（含灼烧 / 剧毒跳伤）
+#   on_player_healed      任一次治疗结算后（满血 0 治疗也广播）
+#   on_shield_gained      真的加上护盾之后（加 0 不算）
+#   on_shield_broken      护盾池被一次伤害从 >0 打空
+#   on_card_destroyed / on_card_repaired
+#   on_card_frozen / on_card_hasted / on_card_slowed / on_card_charged
+#   on_burn_tick / on_poison_tick / on_regen_tick   持续效果每次结算
 #
-# ---------- ⏳ 词典已有、引擎未广播（14 词）----------
-#   battle_end · before_action
-#   on_player_healed · on_shield_gained · on_shield_broken
-#   on_card_destroyed · on_card_repaired
-#   on_card_frozen · on_card_hasted · on_card_slowed · on_card_charged
-#   on_burn_tick · on_poison_tick · on_regen_tick
+# ---------- ⏳ 引擎未广播（2 词）----------
+#   before_action · battle_end
 # ============================================================

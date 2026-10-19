@@ -2,8 +2,9 @@
  * **引擎 / 数据兼容版本号的唯一来源**。
  *
  * 口径：
- *  - **正式版之前所有版本号一律 `0.0.0`**：本常量必须与 `package.json` 的 `version` 一致，
- *    由 `tools/check-config.mjs` 在 `npm run verify` 第一步（`check:config`）校验；正式版确认为 `1.0.0`。
+ *  - **正式版（1.0.0）之前按"内测小版本"递增**：`0.1.0` → `0.2.0` …（RW 2026-10-19 定：内测期
+ *    不再固定 `0.0.0`）。本常量必须与 `package.json` 的 `version` 一致，由 `tools/check-config.mjs`
+ *    在 `npm run verify` 第一步（`check:config`）校验。
  *  - `pack.yml` 的 **`engineRange` 与"引擎 / 规则版本"比较时以本常量为准** —— 它与文档版本号
  *    是两条互不复用的线。
  *  - 区间比较**已实现**（见 `cards/schema.ts` 的 `engineRangeSatisfied()` 与
@@ -16,5 +17,5 @@
  *    是旧名（按  `` 历史行不回改）。
  */
 
-/** 引擎版本（`major.minor.patch`）。正式版之前固定 `0.0.0`、与 `package.json.version` 同步。 */
-export const ENGINE_VERSION = '0.0.0'
+/** 引擎版本（`major.minor.patch`）：内测期从 `0.1.0` 起递增，与 `package.json.version` 同步。 */
+export const ENGINE_VERSION = '0.1.0'

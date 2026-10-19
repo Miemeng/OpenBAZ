@@ -31,9 +31,9 @@ export const BUILTIN_UPGRADE_CHAIN: readonly string[] = BUILTIN_RARITY_IDS
  */
 export const BUILTIN_RARITY_VALUES: Readonly<Record<string, number>> = {
   bronze: 1,
-  silver: 3,
-  gold: 8,
-  diamond: 20,
+  silver: 2,
+  gold: 4,
+  diamond: 8,
 }
 
 /** 表外的品阶（自定义 / 未登记）回落到这个基础价值。 */

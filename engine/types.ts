@@ -156,7 +156,17 @@ export interface ActionSpec {
  */
 export interface AuraApply {
   readonly stat: string
-  readonly amount: number
+  /**
+   * 平铺数额：**字面量或表达式**。
+   *
+   * - 字面量 `2` / `-1`：与旧口径完全一致；
+   * - 表达式 `{ ref: 'self.atk' }` / `{ add: [{ ref: 'self.atk' }, 2] }`：在**来源上下文**里
+   *   每帧只求值一次（与目标无关），`self` = 光环来源卡 / 来源技能的 `stats`。
+   *
+   * ⚠️ 表达式里的引用**不读光环层**（`preAuraStat` / `preAuraDotStacks`）：光环贡献不由其它光环
+   * 加成后再回头影响自己，否则"数额 = 自身攻击"会逐帧放大、也会引入一帧延迟。
+   */
+  readonly amount: Expr
 }
 
 /**
@@ -257,7 +267,7 @@ export interface Card {
   readonly rarity: string
   readonly description?: string
   readonly owner?: string
-  /** 数值表（stats 开放表：atk 必填，speed / cdp / shield / heal / burn / poison / regen / haste / slow / freeze / charge） */
+  /** 数值表（stats 开放表：卡面整张表可省略，空缺省 `{}`；speed / cdp / shield / heal / burn / poison / regen / haste / slow / freeze / charge） */
   readonly stats: Readonly<Record<string, number>>
   /** 行动条充满后主动行动的次数（缺省 1） */
   readonly multicast?: number
@@ -383,6 +393,15 @@ export interface BoardCard {
    * （单槽：写入即**整件替换**，旧件的 `aura` / `stats` / `actions` 一并回滚）。
    */
   enchant?: string
+  /**
+   * **阵容覆盖的数值**（`decks/*.yml` 的 `cards[].stats`）—— 取值**覆盖**卡面同名字段。
+   *
+   * 叠加次序（唯一权威 = 《[规则说明书.md](../docs/规则说明书.md)》§18.7 与《[光环设计.md](../docs/设计/光环设计.md)》§4.3）：
+   * **卡面 → 本覆盖 → 附魔自带 `stats` → 局内 buff（`stats` 数组）→ 光环（平铺、再倍率）**。
+   * 于是 `effectiveStat` 的"卡面基础层" = `本覆盖 ?? 卡面值` + 附魔 `stats`。
+   * 不写 ⇒ `undefined`（完全用卡面值）；`speed` / `cdp` 由阵容校验拒绝，不会出现在这里。
+   */
+  readonly statOverrides?: Readonly<Record<string, number>>
 }
 
 /** 玩家身上的持续效果实例 */
@@ -569,6 +588,15 @@ export interface LogMessage {
   readonly data?: Readonly<Record<string, number | string>>
 }
 
+/**
+ * 语言表：**纯数据**的「文案键 → 模板」映射（引擎不读文件，见 `BattleOptions.locale`）。
+ *
+ * 键 = 文案键（当前 = `MessageCode` 的 7 条消息码）；值 = 模板，占位符写作 `{参数名}`，
+ * 参数取自 `LogMessage.data`；另有两个**派生参数** `{value}`（光环增减量的带符号显示，
+ * 由 `engine/log.ts` 现算）。**缺表 / 缺键 ⇒ 逐条回落内置中文**。
+ */
+export type LocaleTable = Readonly<Record<string, string>>
+
 /** 建立对局所需的输入 */
 export interface BattleOptions {
   readonly seed: number
@@ -600,6 +628,14 @@ export interface BattleOptions {
    * 见 `LogLevel` 的说明：**只影响"记不记"，不影响任何对局结果**。
    */
   readonly logLevel?: LogLevel
+  /**
+   * 语言表（选填）。**纯数据注入** —— 引擎不读文件；**不传 = 用内置中文**（输出逐字节不变）。
+   * 缺表 / 缺键 ⇒ 逐条回落到内置中文（[engine/log.ts](log.ts) 的 `messageText`）。
+   *
+   * 纪律（与 `messages` 同一套）：**不进确定性 hash、不消耗 rng、不改变任何判定**；
+   * 因此换语言只改文本，不改对局结果。
+   */
+  readonly locale?: LocaleTable
   /**
    * 是否采集**逐触发帧状态快照**（缺省 `false`；开启后 `BattleResult.frames` 非空）。
    *
@@ -695,6 +731,11 @@ export interface BattleState {
    * 。
    */
   readonly messages: LogMessage[]
+  /**
+   * 本局使用的语言表（= `BattleOptions.locale` 的原样引用；缺省 = 用内置中文）。
+   * **只读、只影响文本渲染**，不参与任何判定、不进确定性 hash。
+   */
+  readonly locale?: LocaleTable
   /**
    * 光环派生态快照（每触发帧边界由 `refreshAuras` **整体替换**）。
    * **只读派生数据**：不参与任何判定之外的写入，不进确定性哈希。

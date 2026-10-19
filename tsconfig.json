@@ -23,7 +23,7 @@
     "noUnusedParameters": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["engine/**/*.ts", "cards/**/*.ts", "simulator/**/*.ts"],
+  "include": ["engine/**/*.ts", "cards/**/*.ts", "simulator/**/*.ts", "desktop/**/*.ts"],
   // client/ 用独立配置（要 jsx、不参与 Node 直跑）；client/**/*.tsx 是 Node 类型擦除明确不支持的格式
   "exclude": ["node_modules", "dist", "client"]
 }

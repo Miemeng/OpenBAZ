@@ -8,10 +8,10 @@
 //   · 卡面名字、品阶色与**卡图**来自**跑那一局时的阵容快照**（`cardOf` 按"方 + 格号"建表），
 //     所以跑完之后再改草稿也不会让回放变样。
 
-// **尺寸口径（RW 定：小卡 高3宽2 / 中卡 高3宽4 / 大卡 高3宽6）** 见 `client/state/boardUnits.ts`：
-//   一行 10 格 = **20 个单位列 × 3 个单位行**（1 格 = 2 列），小 / 中 / 大卡占 2 / 4 / 6 列、**都占满 3 行**；
-//   行高由 `aspect-ratio: 20 / 3` 跟着宽度走 ⇒ 单位格是正方形，卡面比例正好是
-//   2:3 / 4:3 / 6:3（= 《卡面表现设计.md》§2 的三尺寸 200×300 / 400×300 / 600×300）。
+// **尺寸口径（RW 定：小卡 高4宽2 / 中卡 高4宽4 / 大卡 高4宽6）** 见 `client/state/boardUnits.ts`：
+//   一行 10 格 = **20 个单位列 × 4 个单位行**（1 格 = 2 列），小 / 中 / 大卡占 2 / 4 / 6 列、**都占满 4 行**；
+//   行高由 `aspect-ratio: 20 / 4` 跟着宽度走 ⇒ 单位格是正方形，卡面比例正好是
+//   2:4 / 4:4 / 6:4（= 《卡面表现设计.md》§2 的三尺寸 200×400 / 400×400 / 600×400）。
 import { useMemo } from 'react'
 import type { MouseEvent } from 'react'
 import { ROW_SLOTS, slotsForCard } from '../../../engine/board.ts'
@@ -305,7 +305,7 @@ function BattlePlayer({
 }
 
 /* ------------------------------------------------------------------ *
- * 战场一行（10 格 = 20 个单位列 × 3 个单位行 + 叠在上面的卡）
+ * 战场一行（10 格 = 20 个单位列 × 4 个单位行 + 叠在上面的卡）
  * ------------------------------------------------------------------ */
 
 interface FrameBoardProps {
@@ -416,7 +416,7 @@ function BattleCard({
   const name = def === undefined ? card.instanceId : def.name
   const span = def === undefined ? 1 : slotsForCard(def)
   const percent = ratio === null ? null : Math.round(ratio * 100)
-  // 一格宽（小卡，约 97px）放不下「攻 5」，只显示数字；属性条也留出更多格
+  // 一格宽（小卡）放不下「攻 5」，只显示数字；属性条也留出更多格
   const compact = span <= 1
   const stats = statRowsOf(card)
 

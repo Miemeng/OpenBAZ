@@ -15,6 +15,7 @@ import type { Card } from '../../../engine/types.ts'
 import { buildAssetIndex } from '../../data/assets.ts'
 import { packSource, type DeckText } from '../../data/packSource.ts'
 import { buildRows } from '../../state/cardLibrary.ts'
+import { t } from '../../i18n/index.ts'
 import {
   addPlacement,
   draftFromDeckText,
@@ -24,12 +25,15 @@ import {
   withHero,
   withHpText,
   withPlacementEnchant,
+  withPlacementStat,
+  sideToDeckDto,
   type SideDraft,
   type SimulateDraft,
 } from '../../state/simulateDraft.ts'
+import { deckToYaml, nextDeckFileName } from '../../state/deckYaml.ts'
 import { newSeed, parseSeedText } from '../../state/simulateRun.ts'
 import { BoardRow, type BoardPreview } from './BoardRow.tsx'
-import { EnchantSidebar } from './EnchantSidebar.tsx'
+import { EditPanel } from './EditPanel.tsx'
 import { PlayerPanel } from './PlayerPanel.tsx'
 
 type SideKey = 'A' | 'B'
@@ -77,8 +81,10 @@ function withSide(draft: SimulateDraft, key: SideKey, side: SideDraft): Simulate
 
 export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStart }: SimulateBoardProps) {
   const [held, setHeld] = useState<HeldCard | null>(null)
-  /** 正在编辑附魔的那一处摆盘（`null` = 未选卡 ⇒ 侧边栏空态） */
+  /** 正在编辑的那一处摆盘（`null` = 未选卡 ⇒ 编辑栏空态） */
   const [editing, setEditing] = useState<{ side: SideKey; index: number } | null>(null)
+  /** 编辑栏展开 / 收起：收起后只剩 32px 栏头，把 228px 还给卡牌栏 */
+  const [editOpen, setEditOpen] = useState(true)
   const [hover, setHover] = useState<HoverSlot | null>(null)
   /** 放不下时的一句话说明（没选卡就点格子 / 越界 / 重叠） */
   const [placeNote, setPlaceNote] = useState<string | null>(null)
@@ -211,16 +217,18 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
           ? undefined
           : sideOf(current, active.fromSide).placements[active.fromIndex]
       const keep = source?.enchant
+      // ⚠️ 挪位 / 跨方搬运是"先删后加" ⇒ **覆盖数值也要显式带过去**（它挂在"这一处摆盘"上，不挂格号）
+      const keepStats = source?.stats
       const sameSide = active.fromSide === target.side && active.fromIndex !== undefined
       if (sameSide) {
         const without = removePlacementAt(targetSide, active.fromIndex ?? 0)
-        return withSide(current, target.side, addPlacement(without, active.cardId, target.slot, keep))
+        return withSide(current, target.side, addPlacement(without, active.cardId, target.slot, keep, keepStats))
       }
       let next = current
       if (active.fromSide !== undefined && active.fromIndex !== undefined) {
         next = withSide(next, active.fromSide, removePlacementAt(sideOf(next, active.fromSide), active.fromIndex))
       }
-      return withSide(next, target.side, addPlacement(sideOf(next, target.side), active.cardId, target.slot, keep))
+      return withSide(next, target.side, addPlacement(sideOf(next, target.side), active.cardId, target.slot, keep, keepStats))
     })
   }
 
@@ -232,6 +240,52 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
     const imported = parsed.side
     if (imported === undefined) return
     onChange((current) => withSide(current, key, imported))
+  }
+
+  /* ---------------- 保存 / 导出 ---------------- */
+
+  /**
+   * 保存本侧阵容：
+   * - **桌面宿主**（`window.host` 存在）⇒ 写进 `userData/decks/<名字>.yml`，并把文件加进清单；
+   * - **浏览器** ⇒ 下载 YAML + 复制到剪贴板（没有写盘能力）。
+   */
+  function saveDeck(key: SideKey): void {
+    const built = sideToDeckDto(sideOf(draft, key))
+    if (!('dto' in built)) {
+      setImportIssues(built.errors)
+      return
+    }
+    const fileName = nextDeckFileName(key, decks.map((deck) => deck.path))
+    const text = deckToYaml({ ...built.dto, name: fileName.replace(/\.ya?ml$/u, '') }, fileName)
+    setImportIssues([])
+
+    if (packSource.saveDeck !== undefined) {
+      void packSource
+        .saveDeck(fileName, text)
+        .then((saved) => {
+          setDecks((current) => [{ path: saved.path, text }, ...current.filter((deck) => deck.path !== saved.path)])
+          setDeckError(null)
+        })
+        .catch((error: unknown) => {
+          setDeckError(error instanceof Error ? error.message : String(error))
+        })
+      return
+    }
+
+    // ① 下载：`<a download>` + Blob（不依赖任何宿主能力）
+    const blob = new Blob([text], { type: 'text/yaml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.click()
+    URL.revokeObjectURL(url)
+
+    // ② 复制：剪贴板可能不可用（非安全上下文 / 用户拒绝）⇒ 失败不算错
+    void navigator.clipboard?.writeText(text).catch(() => undefined)
+
+    // ③ 进清单（标记为本会话的"本地"文件；`path` 带 `decks/` 前缀以便和真文件同形）
+    setDecks((current) => [{ path: `decks/${fileName}`, text }, ...current])
   }
 
   /* ---------------- 开始对局（交给外壳去跑） ---------------- */
@@ -271,114 +325,109 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
     draft.sideA.placements.length > 0 &&
     draft.sideB.placements.length > 0
 
+  /** 编辑栏当前看着的那一处摆盘（未选卡 / 该处已被移除 ⇒ `undefined` = 空态） */
+  const editingPlacement =
+    editing === null ? undefined : sideOf(draft, editing.side).placements[editing.index]
+  const editingCard = editingPlacement === undefined ? undefined : cardOf(editingPlacement.cardId)
+
+  /** 附魔**即时生效**：直接写回草稿里那一处摆盘（不碰引擎、不重算任何规则） */
+  function pickEnchant(enchantId: string | undefined): void {
+    if (editing === null) return
+    const { side: key, index: at } = editing
+    onChange((current) => {
+      return withSide(current, key, withPlacementEnchant(sideOf(current, key), at, enchantId))
+    })
+  }
+
+  /** 覆盖数值同样**即时生效**（`undefined` = 撤掉这一项，回到卡面值） */
+  function pickStat(stat: string, value: number | undefined): void {
+    if (editing === null) return
+    const { side: key, index: at } = editing
+    onChange((current) => {
+      return withSide(current, key, withPlacementStat(sideOf(current, key), at, stat, value))
+    })
+  }
+
   return (
     <section
       className="simulate"
       onClick={(event) => {
         // 点**空白区域**才取消"正在编辑的那一处"（RW 口径）：
         //   · 场上格子 / 场上的卡 ⇒ 属于"摆盘 / 挪位"流程，**不**清空；
-        //   · 编辑栏自身（`.es`）⇒ 是在里面操作，**不**清空；
+        //   · 编辑栏自身（`.ep`）⇒ 是在里面操作，**不**清空；
         //   · 卡牌列表项自己会清（它要开始"手持一张卡"），这里不重复处理也不误伤。
         const target = event.target instanceof Element ? event.target : null
         if (target === null) return
         if (target.closest('[data-board-slot]') !== null) return
-        if (target.closest('.es') !== null) return
+        if (target.closest('.ep') !== null) return
         setEditing(null)
       }}
     >
-      <aside className="source">
-        <input
-          className="search"
-          type="search"
-          placeholder="搜索卡名 / id"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
+      <div className="sim-left">
+        <aside className="source">
+          <input
+            className="search"
+            type="search"
+            placeholder="搜索卡名 / id"
+            value={query}
+            onChange={(event) => {
+              setQuery(event.target.value)
+            }}
+          />
+          <p className="hint">
+            {held === null || held.fromIndex !== undefined
+              ? '点一张卡选中它，再点棋盘上的格子放下（同名卡可以放多张）'
+              : `手持「${cardOf(held.cardId)?.name ?? held.cardId}」—— 点格子放下，再点它一次取消`}
+          </p>
+          <ul className="source-list">
+            {filtered.map((row) => {
+              const armed = held !== null && held.fromIndex === undefined && held.cardId === row.card.id
+              return (
+                <li key={row.card.id}>
+                  <button
+                    type="button"
+                    className={armed ? 'source-item source-item-on' : 'source-item'}
+                    onClick={() => {
+                      pickSource(row.card.id)
+                      // 点卡牌列表 = 开始"手持一张卡去放" ⇒ 编辑栏回空态（RW 口径）
+                      setEditing(null)
+                    }}
+                  >
+                    <i className="bar" style={{ background: row.rarity.color }} />
+                    <span className="source-name">{row.card.name}</span>
+                    <span className="source-meta">
+                      {row.rarity.name}
+                      {row.card.stats.atk === undefined ? '' : ` · atk ${String(row.card.stats.atk)}`}
+                    </span>
+                  </button>
+                </li>
+              )
+            })}
+            {filtered.length === 0 && <li className="empty">没有匹配的卡</li>}
+          </ul>
+        </aside>
+
+        {/* 编辑栏（§AF = A）：左栏竖分两段的**下半段** —— 固定 260px，栏头可收成 32px 标题条 */}
+        <EditPanel
+          card={editingCard}
+          current={editingPlacement?.enchant}
+          stats={editingCard?.stats}
+          overrides={editingPlacement?.stats}
+          onStat={pickStat}
+          open={editOpen}
+          onToggle={() => {
+            setEditOpen((was) => !was)
           }}
+          onPick={pickEnchant}
         />
-        <p className="hint">
-          {held === null || held.fromIndex !== undefined
-            ? '点一张卡选中它，再点棋盘上的格子放下（同名卡可以放多张）'
-            : `手持「${cardOf(held.cardId)?.name ?? held.cardId}」—— 点格子放下，再点它一次取消`}
-        </p>
-        <ul className="source-list">
-          {filtered.map((row) => {
-            const armed = held !== null && held.fromIndex === undefined && held.cardId === row.card.id
-            return (
-              <li key={row.card.id}>
-                <button
-                  type="button"
-                  className={armed ? 'source-item source-item-on' : 'source-item'}
-                  onClick={() => {
-                    pickSource(row.card.id)
-                    // 点卡牌列表 = 开始"手持一张卡去放" ⇒ 左下编辑栏回空态（RW 口径）
-                    setEditing(null)
-                  }}
-                >
-                  <i className="bar" style={{ background: row.rarity.color }} />
-                  <span className="source-name">{row.card.name}</span>
-                  <span className="source-meta">
-                    {row.rarity.name} · atk {String(row.card.stats.atk ?? 0)}
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-          {filtered.length === 0 && <li className="empty">没有匹配的卡</li>}
-        </ul>
+      </div>
 
-        {/* 附魔侧边栏（C4c）：固定在列表下方，高度上限 200px、内部滚动 —— 给卡牌列表让出空间 */}
-        <div style={{ maxHeight: 200, overflowY: 'auto', borderTop: '1px solid #2b2b33', paddingTop: 6 }}>
-          {(() => {
-            const target =
-              editing === null ? undefined : sideOf(draft, editing.side).placements[editing.index]
-            const targetCard = target === undefined ? undefined : cardOf(target.cardId)
-            return (
-              <EnchantSidebar
-                card={targetCard}
-                current={target?.enchant}
-                onPick={(enchantId) => {
-                  if (editing === null) return
-                  onChange((current) => {
-                    const side = sideOf(current, editing.side)
-                    return withSide(current, editing.side, withPlacementEnchant(side, editing.index, enchantId))
-                  })
-                }}
-              />
-            )
-          })()}
-        </div>
-      </aside>
-
-      <div className="board-area">
+      {/* `data-held` 只给样式用：手持一张卡时格子换成"可放下"的光标（F4 交互一致性） */}
+      <div className="board-area" data-held={held !== null ? 'true' : 'false'}>
         <div className="import-row">
-          <span className="facet-label">导入阵容</span>
-          {decks.map((deck) => (
-            <span key={deck.path} className="import-deck">
-              <code>{deck.path}</code>
-              <button
-                type="button"
-                className="chip"
-                onClick={() => {
-                  importDeck(deck, 'A')
-                }}
-              >
-                → A
-              </button>
-              <button
-                type="button"
-                className="chip"
-                onClick={() => {
-                  importDeck(deck, 'B')
-                }}
-              >
-                → B
-              </button>
-            </span>
-          ))}
-          {decks.length === 0 && !deckError && <span className="hint">没有现成阵容（`decks/` 为空）</span>}
-          {deckError !== null && <span className="issue-error">阵容列表取不到：{deckError}</span>}
-          <span className="hint">只读导入（导出留到以后）</span>
+          <span className="facet-label">{t('board.deckFiles')}</span>
+          <span className="hint">{t('board.deckFilesHint')}</span>
+          {deckError !== null && <span className="issue-error">{t('board.deckListError', { detail: deckError })}</span>}
         </div>
 
         {importIssues.length > 0 && (
@@ -405,6 +454,13 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
           onToggleSkill={(skillId) => {
             onChange((current) => ({ ...current, sideA: toggleSkill(current.sideA, skillId) }))
           }}
+          deckFiles={decks}
+          onImport={(deck) => {
+            importDeck(deck, 'A')
+          }}
+          onSave={() => {
+            saveDeck('A')
+          }}
         />
         <BoardRow
           side="A"
@@ -423,6 +479,8 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
           onCardClick={(index) => {
             pickPlaced('A', index)
             setEditing({ side: 'A', index })
+            // 点棋盘上的卡 = 要编辑它 ⇒ 编辑栏自动展开（§AF.6 = A）
+            setEditOpen(true)
           }}
           onRemove={(index) => {
             onChange((current) => ({ ...current, sideA: removePlacementAt(current.sideA, index) }))
@@ -445,6 +503,13 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
           onToggleSkill={(skillId) => {
             onChange((current) => ({ ...current, sideB: toggleSkill(current.sideB, skillId) }))
           }}
+          deckFiles={decks}
+          onImport={(deck) => {
+            importDeck(deck, 'B')
+          }}
+          onSave={() => {
+            saveDeck('B')
+          }}
         />
         <BoardRow
           side="B"
@@ -463,6 +528,8 @@ export function SimulateBoard({ draft, onChange, packs, registry, hasRun, onStar
           onCardClick={(index) => {
             pickPlaced('B', index)
             setEditing({ side: 'B', index })
+            // 点棋盘上的卡 = 要编辑它 ⇒ 编辑栏自动展开（§AF.6 = A）
+            setEditOpen(true)
           }}
           onRemove={(index) => {
             onChange((current) => ({ ...current, sideB: removePlacementAt(current.sideB, index) }))

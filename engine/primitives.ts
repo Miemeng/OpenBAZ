@@ -159,7 +159,8 @@ export function addShield(player: PlayerState, amount: number): number {
 }
 
 /**
- * 施加卡牌状态。三者独立计时、不互相覆盖：同类则刷新时长（取较大者），异类则并存。
+ * 施加卡牌状态。三者独立计时、不互相覆盖：**同类再次施加 ⇒ 时长叠加**（RW 2026-10-19 裁定，
+ * 取代旧的"取较大者"），异类则并存。
  *
  * 周期若因这次施加而变化（加速 / 减速；冰冻不算）则**按比例缩放行动条**，见 `syncActionBarPeriod`。
  *
@@ -170,8 +171,8 @@ export function applyCardStatus(boardCard: BoardCard, kind: CardStatusKind, dura
   const periodBeforeCs = actionPeriodCs(boardCard)
   const existing = boardCard.statuses.find((status) => status.kind === kind)
   if (existing !== undefined) {
-    // 同类刷新时长**不改变周期**（状态本来就在），故不需要缩放
-    existing.remainingCs = Math.max(existing.remainingCs, durationCs)
+    // 同类叠加**不改变周期**（状态本来就在），故不需要缩放行动条
+    existing.remainingCs += durationCs
     return
   }
   boardCard.statuses.push({ kind, remainingCs: durationCs })

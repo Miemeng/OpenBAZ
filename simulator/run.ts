@@ -28,8 +28,10 @@ import type { ValidationError } from '../cards/types.ts'
 import { DEFAULT_LOG_LEVEL, parseLogLevel, renderSetup } from '../engine/log.ts'
 import { csToSeconds, createBattleState, MAX_TIME_SECONDS } from '../engine/state.ts'
 import { runBattle } from '../engine/tick.ts'
-import type { BattleOptions, LogLevel } from '../engine/types.ts'
+import type { BattleOptions, LocaleTable, LogLevel } from '../engine/types.ts'
 import { hasFatal, loadDecks } from './deck.ts'
+import { battleDigest } from './digest.ts'
+import { loadLocaleTable, localeNameOf, resolveLocalePath } from './locale.ts'
 
 /** 把一条校验问题渲染成一行（与 `simulator/validate.ts` 的 `formatIssue` 同形；那边未导出，故此处自带）。 */
 function formatIssue(issue: ValidationError): string {
@@ -55,6 +57,10 @@ interface CliOptions {
   readonly deckBPath: string | null
   /** 额外数据根（可重复）；缺省 = 只加载 `packs/`。 */
   readonly packRoots: readonly string[]
+  /** 语言表（语言名或文件路径）；`null` = 用引擎内置中文。 */
+  readonly localePath: string | null
+  /** 若非 null，把**结构化摘要**（与语言无关）写入该路径；确定性回归用它当判据。 */
+  readonly digestPath: string | null
 }
 
 function parseArgs(argv: readonly string[]): CliOptions {
@@ -66,6 +72,8 @@ function parseArgs(argv: readonly string[]): CliOptions {
   let deckAPath: string | null = null
   let deckBPath: string | null = null
   const packRoots: string[] = []
+  let localePath: string | null = null
+  let digestPath: string | null = null
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i]
@@ -117,12 +125,30 @@ function parseArgs(argv: readonly string[]): CliOptions {
         throw new Error(`--seed 需要数值，收到 ${arg}`)
       }
       seed = parsed
+    } else if (arg === '--locale') {
+      const raw = argv[i + 1]
+      if (raw === undefined) {
+        throw new Error('--locale 后面缺少语言名或文件路径')
+      }
+      localePath = raw
+      i += 1
+    } else if (arg !== undefined && arg.startsWith('--locale=')) {
+      localePath = arg.slice('--locale='.length)
+    } else if (arg === '--digest') {
+      const raw = argv[i + 1]
+      if (raw === undefined) {
+        throw new Error('--digest 后面缺少文件路径')
+      }
+      digestPath = raw
+      i += 1
+    } else if (arg !== undefined && arg.startsWith('--digest=')) {
+      digestPath = arg.slice('--digest='.length)
     } else {
       throw new Error(`无法识别的参数：${String(arg)}（用 --help 查看用法）`)
     }
   }
 
-  return { seed, quiet, help, logPath, logLevel, deckAPath, deckBPath, packRoots }
+  return { seed, quiet, help, logPath, logLevel, deckAPath, deckBPath, packRoots, localePath, digestPath }
 }
 
 // 需要强调路径 / 标识符时统一用「」。
@@ -136,6 +162,10 @@ const USAGE = `用法：node simulator/run.ts --deckA <路径> --deckB <路径> 
   --log <路径>   把全部输出额外写入该文件（UTF-8，无时间戳；不要用 shell 的 > 重定向）
   --log-level    消息记录阈值，缺省 note；合法取值：error / warn / note / info / debug
                  （只影响「提示消息记不记」，不影响对局结果；低于阈值的消息直接丢弃）
+  --locale <名|路径> 语言表（缺省 = 引擎内置中文）：写语言名「zh-CN」⇒ 读「locales/zh-CN.yml」，
+                 也可直接给文件路径。只换文案，不改对局结果
+  --digest <路径> 把**结构化摘要**（与语言无关：终局结果 + 完整动作日志 + 消息 code/参数）
+                 写入该文件；确定性回归用它当判据，不再 hash 文本日志
   --help         显示本帮助`
 
 function main(): void {
@@ -166,7 +196,10 @@ function main(): void {
   }
 
   const roots = options.packRoots.length > 0 ? options.packRoots : [PACKS_ROOT]
-  const loaded = loadDecks(roots, options.deckAPath, options.deckBPath)
+  // 数据文案（`name` / `description`）按 `--locale` 的**语言名**解析：
+  // 给语言名就用它；给文件路径则取文件名主干（`locales/en.yml` ⇒ `en`）。
+  const dataLocale = options.localePath === null ? undefined : localeNameOf(options.localePath)
+  const loaded = loadDecks(roots, options.deckAPath, options.deckBPath, dataLocale)
   if (hasFatal(loaded.errors)) {
     out(`=== 数据 / 阵容有问题（${String(loaded.errors.length)} 条）===`)
     for (const issue of loaded.errors) out(formatIssue(issue))
@@ -197,6 +230,22 @@ function main(): void {
     return
   }
 
+  // ——— 语言表（选填）：**纯数据注入**，只换文案 ——
+  // 注意：这里**只在给了 `--locale` 时才打印一行**，缺省路径的输出与引入语言表之前逐字节一致
+  // （确定性回归的 5 条基准正是靠这一点不变）。
+  let locale: LocaleTable | null = null
+  if (options.localePath !== null) {
+    try {
+      locale = loadLocaleTable(resolveLocalePath(options.localePath))
+    } catch (error) {
+      out(`！${error instanceof Error ? error.message : String(error)}`)
+      flushLog(options.logPath, fileLines)
+      process.exitCode = 1
+      return
+    }
+    out(`语言表：${options.localePath}（${String(Object.keys(locale).length)} 条）`)
+  }
+
   const battleOptions: BattleOptions = {
     seed: options.seed,
     // 玩家名保持固定：阵容名（`loaded.deckX.name`）留给客户端展示，CLI 侧改名会顺手改掉日志语义
@@ -212,6 +261,7 @@ function main(): void {
     maxHpA: loaded.deckA.maxHp,
     hpB: loaded.deckB.hp,
     maxHpB: loaded.deckB.maxHp,
+    ...(locale === null ? {} : { locale }),
   }
 
   // 开局摆盘图必须打**开局**状态，而 `runBattle` 返回的 `state` 是**终局**状态
@@ -219,6 +269,11 @@ function main(): void {
   // 这里按同一份入参再建一次初始状态专供展示 —— `createBattleState` 只构造状态、不推进时钟。
   const initialState = createBattleState(battleOptions)
   const result = runBattle(battleOptions)
+
+  // 结构化摘要（与语言无关）：确定性回归的判据落在这里，文本日志不再参与 hash（AG.5 = B）。
+  if (options.digestPath !== null) {
+    writeFileSync(options.digestPath, battleDigest(result), { encoding: 'utf8' })
+  }
 
   const { state } = result
 

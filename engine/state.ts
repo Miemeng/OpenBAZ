@@ -208,14 +208,31 @@ export function activeEnchantOf(boardCard: BoardCard): EnchantDef | undefined {
  * **速度不走这里**（光环不得作用于 speed；速度只有状态系数，见 `speedMultiplier`）。
  */
 export function effectiveStat(state: BattleState, boardCard: BoardCard, stat: string): number {
-  const enchantStats = activeEnchantOf(boardCard)?.stats
-  let total = (boardCard.card.stats[stat] ?? 0) + (enchantStats?.[stat] ?? 0)
-  for (const modifier of boardCard.stats) {
-    if (modifier.stat === stat) total += modifier.amount
-  }
+  let total = preAuraStat(boardCard, stat)
   const aura = state.auras.cards.get(boardCard.instanceId)?.get(stat)
   if (aura !== undefined) total = (total + aura.flat) * (1 + aura.factor)
   return Math.round(total)
+}
+
+/**
+ * `effectiveStat` 的**前两层**：卡面基础（含附魔自带 `stats`）+ 局内 buff 修正，**不含光环层**、
+ * **不取整**。
+ *
+ * 用途只有一处：**光环定义里的表达式求值**（`amount: { ref: self.atk }`）——
+ * 光环的数额不能读"被其它光环加成过的值"，否则
+ * ① "本卡治疗 + 等同于攻击" 这类写法会逐帧自增（自我放大）；
+ * ② 读到的是上一帧快照，结果会随帧序漂移（同一场景换个帧边界结果就变）。
+ * 于是口径 = **光环里的引用只看"卡面 + buff"**，与光环叠加顺序无关。
+ */
+export function preAuraStat(boardCard: BoardCard, stat: string): number {
+  const enchantStats = activeEnchantOf(boardCard)?.stats
+  // 卡面基础层 = （卡面值 **被阵容覆盖**） + 附魔自带 stats（C5 叠加次序）
+  const base = boardCard.statOverrides?.[stat] ?? boardCard.card.stats[stat] ?? 0
+  let total = base + (enchantStats?.[stat] ?? 0)
+  for (const modifier of boardCard.stats) {
+    if (modifier.stat === stat) total += modifier.amount
+  }
+  return total
 }
 
 /**
@@ -229,11 +246,21 @@ export function effectiveStat(state: BattleState, boardCard: BoardCard, stat: st
  * 保证"看到的层数 = 算伤害用的层数"。
  */
 export function effectiveDotStacks(state: BattleState, player: PlayerState, kind: DotKind): number {
+  return Math.round(preAuraDotStacks(player, kind) + (state.auras.dots.get(`${player.id}:${kind}`) ?? 0))
+}
+
+/**
+ * 玩家某一种持续效果的**实例层数之和**（不含光环贡献、不取整）。
+ *
+ * 与 `preAuraStat` 同一用途：光环定义里的表达式（`amount: { ref: own_player.burn }`）只读这一层，
+ * 免得"给灼烧加层数的光环"把自己的贡献读回来逐帧翻倍。
+ */
+export function preAuraDotStacks(player: PlayerState, kind: DotKind): number {
   let total = 0
   for (const dot of player.dots) {
     if (dot.kind === kind) total += dot.stacks
   }
-  return Math.round(total + (state.auras.dots.get(`${player.id}:${kind}`) ?? 0))
+  return total
 }
 
 /** 该卡当前是否处于某个状态 */
@@ -394,6 +421,9 @@ export function createBattleState(options: BattleOptions): BattleState {
     draw: false,
     rng: new Rng(options.seed),
     messages: [],
+    // 语言表是**纯数据引用**：只影响文本渲染，不参与判定（`exactOptionalPropertyTypes`
+    // 下不能写成 `locale: undefined`，故按"有才写"展开）
+    ...(options.locale === undefined ? {} : { locale: options.locale }),
     auras: emptyAuras(),
   }
 }
@@ -460,6 +490,7 @@ export function cloneState(state: BattleState): BattleState {
     // 消息是纯附加信息（不参与判定），但快照要完整 ⇒ 浅拷贝一层数组即可
     // （元素本身是只读结构，且没有任何地方改写已有消息）
     messages: [...state.messages],
+    ...(state.locale === undefined ? {} : { locale: state.locale }),
     auras: cloneAuras(state.auras),
   }
 }

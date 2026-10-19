@@ -55,6 +55,7 @@ import type {
 } from './schema.ts'
 import { DEFAULT_SLOTS } from './schema.ts'
 import { resolveRarityEconomy } from './economy.ts'
+import { resolveText } from './text.ts'
 import type { HeroDef, RarityDef } from './types.ts'
 
 /** 去掉 `readonly` 的浅层映射（用于"逐字段条件赋值"的构造过程）。 */
@@ -145,7 +146,7 @@ export function mapAura(dto: AuraDto): AuraDef {
     select: typeof dto.select === 'string' ? dto.select : mapSelector(dto.select),
   }
   if (dto.apply !== undefined) {
-    aura.apply = dto.apply.map((entry) => ({ stat: entry.stat, amount: entry.amount }))
+    aura.apply = dto.apply.map((entry) => ({ stat: entry.stat, amount: mapExpr(entry.amount) }))
   }
   if (dto.mul !== undefined) {
     aura.mul = dto.mul.map((entry) => ({ stat: entry.stat, factor: entry.factor }))
@@ -171,12 +172,14 @@ export function mapAbility(dto: AbilityDto): Ability {
 export interface MapCardOptions {
   /** 所属卡包 `pack.yml` 的 `owner`：卡牌没写时**补齐**。 */
   readonly packOwner?: string
+  /** 目标语言（缺省 `DEFAULT_LOCALE`）：只影响 `name` / `description` 的内联多语言解析。 */
+  readonly locale?: string
 }
 
 /** 附魔：DTO → 引擎 `EnchantDef`（三块效果各自可选，未写的不出现在产物里）。 */
-export function mapEnchant(dto: EnchantDefDto): EnchantDef {
+export function mapEnchant(dto: EnchantDefDto, locale?: string): EnchantDef {
   const enchant: Mutable<EnchantDef> = { id: dto.id }
-  if (dto.name !== undefined) enchant.name = dto.name
+  if (dto.name !== undefined) enchant.name = resolveText(dto.name, locale)
   if (dto.color !== undefined) enchant.color = dto.color
   if (dto.aura !== undefined) enchant.aura = mapAura(dto.aura)
   if (dto.stats !== undefined) enchant.stats = { ...dto.stats }
@@ -188,40 +191,40 @@ export function mapEnchant(dto: EnchantDefDto): EnchantDef {
 export function mapCard(dto: CardDto, options: MapCardOptions = {}): Card {
   const card: Mutable<Card> = {
     id: dto.id,
-    name: dto.name,
+    name: resolveText(dto.name, options.locale),
     version: dto.version,
     size: dto.size,
     cooldown: dto.cooldown === -1 ? -1 : secondsToCs(dto.cooldown),
     rarity: dto.rarity,
-    stats: { ...dto.stats },
+    stats: { ...(dto.stats ?? {}) },
   }
   // slots 缺省由 size 推导
   card.slots = dto.slots ?? DEFAULT_SLOTS[dto.size]
   // owner：卡牌自写优先；没写则由所属包补齐
   const owner = dto.owner ?? options.packOwner
   if (owner !== undefined) card.owner = owner
-  if (dto.description !== undefined) card.description = dto.description
+  if (dto.description !== undefined) card.description = resolveText(dto.description, options.locale)
   if (dto.multicast !== undefined) card.multicast = dto.multicast
   if (dto.tags !== undefined) card.tags = [...dto.tags]
   if (dto.hiddenTags !== undefined) card.hiddenTags = [...dto.hiddenTags]
   if (dto.abilities !== undefined) card.abilities = dto.abilities.map((ability) => mapAbility(ability))
   if (dto.aura !== undefined) card.aura = mapAura(dto.aura)
-  if (dto.enchantments !== undefined) card.enchantments = dto.enchantments.map((enchant) => mapEnchant(enchant))
+  if (dto.enchantments !== undefined) card.enchantments = dto.enchantments.map((enchant) => mapEnchant(enchant, options.locale))
   return card
 }
 
 /** 技能：DTO → 引擎 `Skill`（语义规则 ④：`actions` / `stats` 缺省补空）。 */
-export function mapSkill(dto: SkillDto): Skill {
+export function mapSkill(dto: SkillDto, locale?: string): Skill {
   const skill: Mutable<Skill> = {
     id: dto.id,
-    name: dto.name,
+    name: resolveText(dto.name, locale),
     version: dto.version,
     rarity: dto.rarity,
     stats: dto.stats === undefined ? {} : { ...dto.stats },
     actions: dto.actions === undefined ? [] : dto.actions.map((action) => mapAction(action)),
   }
   if (dto.priority !== undefined) skill.priority = dto.priority
-  if (dto.description !== undefined) skill.description = dto.description
+  if (dto.description !== undefined) skill.description = resolveText(dto.description, locale)
   if (dto.trigger !== undefined) skill.trigger = { event: dto.trigger.event }
   if (dto.condition !== undefined) skill.condition = mapCondition(dto.condition)
   if (dto.aura !== undefined) skill.aura = mapAura(dto.aura)
@@ -229,26 +232,26 @@ export function mapSkill(dto: SkillDto): Skill {
 }
 
 /** 角色：DTO → `HeroDef`（语义规则 ④：`initMaxHp` 缺省 = `initHp`）。 */
-export function mapHero(dto: HeroDto): HeroDef {
+export function mapHero(dto: HeroDto, locale?: string): HeroDef {
   const hero: Mutable<HeroDef> = {
     id: dto.id,
-    name: dto.name,
+    name: resolveText(dto.name, locale),
     version: dto.version,
     initHp: dto.initHp,
     initMaxHp: dto.initMaxHp ?? dto.initHp,
   }
   if (dto.levelupMaxHp !== undefined) hero.levelupMaxHp = [...dto.levelupMaxHp]
-  if (dto.description !== undefined) hero.description = dto.description
+  if (dto.description !== undefined) hero.description = resolveText(dto.description, locale)
   // （ `` / ``）：角色 `tags` 字段已整体删除，此处不再映射。
   return hero
 }
 
 /** 一条品阶（`value` / `prize` 已套内置兜底，见 `cards/economy.ts`）。 */
-export function mapRarity(dto: RarityDto): RarityDef {
+export function mapRarity(dto: RarityDto, locale?: string): RarityDef {
   const economy = resolveRarityEconomy(dto.id, dto.value, dto.prize)
   const rarity: Mutable<RarityDef> = {
     id: dto.id,
-    name: dto.name,
+    name: resolveText(dto.name, locale),
     color: dto.color,
     value: economy.value,
     prize: economy.prize,

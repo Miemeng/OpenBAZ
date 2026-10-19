@@ -69,6 +69,21 @@ function codesOf(messages: readonly LogMessage[]): string[] {
 }
 
 describe('光环数值层', () => {
+  it('**多张同名卡各带同一条光环 ⇒ 按来源数累加**（5 张 frostBinder ⇒ 每张友方卡 +10）', () => {
+    const aura: AuraDef = { select: 'all_own_cards', apply: [{ stat: 'atk', amount: 2 }] }
+    const card = cardOf('frostBinder', { atk: 12 }, aura)
+    const { state, emit } = setup([card, card, card, card, card])
+    refreshAuras(state, emit)
+
+    // 每个目标都应拿到 5 个来源 × 2 = +10（而不是"只算一个来源"）
+    for (const boardCard of state.players[1].board) {
+      expect(effectiveStat(state, boardCard, 'atk')).toBe(22)
+    }
+    // 台账也按"来源 × 目标"记：5 个来源 × 5 个目标 = 25 条 apply
+    expect(state.auras.entries.filter((entry) => entry.channel === 'apply')).toHaveLength(25)
+    expect(new Set(state.auras.entries.map((entry) => entry.source)).size).toBe(5)
+  })
+
   it('apply 先平铺、mul 再乘倍率，且 own 视角只覆盖来源方自己的卡', () => {
     const { state, emit } = setup(
       [

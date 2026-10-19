@@ -7,9 +7,11 @@
 //     编辑态让**引擎**算基础周期（`buildBoardCards` + `actionPeriodCs`），不在前端复刻 `cdp` / 速度公式；
 //   · 效果区文本 = 读取层的 `CardRegistry.summary()`（与 CLI 的加载回显同一个函数），本文件只做**分组**。
 
+import type { SummaryKind, SummaryLine } from '../../cards/registry.ts'
+import { renderAuraAmount } from '../../cards/registry.ts'
 import { buildBoardCards, slotsForCard } from '../../engine/board.ts'
 import { actionPeriodCs, csToSeconds } from '../../engine/state.ts'
-import type { Card, EnchantDef, FrameCard } from '../../engine/types.ts'
+import type { Card, EnchantDef, FrameCard, ActionSpec } from '../../engine/types.ts'
 import { ENCHANT_FALLBACK_COLOR, STAT_ROW } from '../theme/colors.ts'
 import type { GaugeView } from './replay.ts'
 
@@ -37,6 +39,12 @@ export interface DetailGauge {
 export interface DetailEffect {
   readonly kind: 'active' | 'passive' | 'skill' | 'aura' | 'enchant'
   readonly text: string
+  /** 结构化三段（有则渲染成「触发器 ▶ 结果」，不解析文本）；`enchant` 行没有 */
+  readonly label?: string | null
+  readonly trigger?: string | null
+  readonly result?: string | null
+  /** 结构化行的原始动作（F9：渲染成自然句）；文本来源与 `enchant` 行没有 */
+  readonly actions?: readonly ActionSpec[]
 }
 
 /** 底部信息条（§4.3 ⑤） */
@@ -64,6 +72,8 @@ export interface CardDetailView {
   readonly rarity: { readonly name: string; readonly color: string }
   readonly description: string | null
   readonly stats: readonly DetailStatRow[]
+  /** **全部**数值（不过 `STAT_ROW` 筛）：效果句里的 `self.atk` / `self.freeze` / `self.charge` 都按它换数 */
+  readonly values: Readonly<Record<string, number>>
   readonly gauge: DetailGauge | null
   readonly effects: readonly DetailEffect[]
   readonly foot: DetailFoot
@@ -77,6 +87,10 @@ export interface BuildDetailInput {
   readonly gauge: GaugeView | undefined
   /** 读取层 `CardRegistry.summary(id)` 的原始行（含首行"已加载 …"，本文件会剥掉） */
   readonly effectLines: readonly string[]
+  /** 读取层 `CardRegistry.summaryLines(id)` 的**结构化行**：给出时按 `kind` 分组（AG.6 = A） */
+  readonly effects?: readonly SummaryLine[]
+  /** 编辑态的当前附魔 id（回放态省略 —— 那种情况由 `FrameCard.enchant` 给） */
+  readonly enchantId?: string
   readonly rarityName: string
   readonly rarityColor: string
   /** 归属文案；`null` = 无归属，不渲染 */
@@ -132,15 +146,24 @@ const EFFECT_RANK: Readonly<Record<DetailEffect['kind'], number>> = {
  * 显示名取 `enchantments[].name`，缺省回落 id；颜色取 `color`，缺省回落
  * `ENCHANT_FALLBACK_COLOR`（见 `theme/colors.ts`）。
  */
-export function detailEnchantOf(card: Card, frame: FrameCard | undefined): DetailEnchant | null {
-  const def = activeEnchantDefOf(card, frame)
+export function detailEnchantOf(
+  card: Card,
+  frame: FrameCard | undefined,
+  enchantId?: string,
+): DetailEnchant | null {
+  const def = activeEnchantDefOf(card, frame, enchantId)
   if (def === undefined) return null
   return { id: def.id, name: def.name ?? def.id, color: def.color ?? ENCHANT_FALLBACK_COLOR }
 }
 
 /** 回放态当前生效的**附魔定义**（`FrameCard.enchant` → `Card.enchantments` 里那一件） */
-export function activeEnchantDefOf(card: Card, frame: FrameCard | undefined): EnchantDef | undefined {
-  const id = frame?.enchant
+export function activeEnchantDefOf(
+  card: Card,
+  frame: FrameCard | undefined,
+  enchantId?: string,
+): EnchantDef | undefined {
+  // 回放态以帧快照为准；编辑态没有帧 ⇒ 用调用方带来的草稿值
+  const id = frame?.enchant ?? enchantId
   if (id === undefined) return undefined
   return (card.enchantments ?? []).find((enchant) => enchant.id === id)
 }
@@ -154,7 +177,7 @@ export function enchantEffectLines(enchant: EnchantDef): readonly string[] {
   if (enchant.aura !== undefined) {
     const select = typeof enchant.aura.select === 'string' ? enchant.aura.select : '查询选择器'
     const channels = [
-      ...(enchant.aura.apply ?? []).map((entry) => `平铺 ${entry.stat}${entry.amount >= 0 ? '+' : ''}${String(entry.amount)}`),
+      ...(enchant.aura.apply ?? []).map((entry) => `平铺 ${entry.stat}${renderAuraAmount(entry.amount)}`),
       ...(enchant.aura.mul ?? []).map((entry) => `倍率 ${entry.stat}×${String(entry.factor)}`),
     ].join('、')
     lines.push(`[附魔] 光环 作用于 ${select}${channels.length > 0 ? `：${channels}` : ''}`)
@@ -166,30 +189,103 @@ export function enchantEffectLines(enchant: EnchantDef): readonly string[] {
   return lines
 }
 
-/** 把读取层回显行切成"效果区"：剥掉首行（`已加载 …`）、合并附魔行、分组、稳定排序 */
+/** 效果区的一行（分组 + 排序用的中间形态；两种来源统一成这个形状） */
+interface EffectRow {
+  readonly kind: DetailEffect['kind']
+  readonly text: string
+  readonly label: string | null
+  readonly trigger: string | null
+  readonly result: string | null
+  /** 结构化来源才有的原始动作（F9）；文本来源为 `null` */
+  readonly actions: readonly ActionSpec[] | null
+  readonly index: number
+}
+
+/** `SummaryKind` 里**真正属于效果区**的那几种（`header` / `enchantCatalog` 是标题与目录说明）。 */
+type EffectSummaryKind = Extract<SummaryKind, 'active' | 'passive' | 'skill' | 'aura'>
+
+/**
+ * 类型守卫：把 `SummaryKind` 收窄成 `EffectSummaryKind`。
+ *
+ * ⚠️ 谓词类型必须是**参数类型的子集** —— 不能直接写 `kind is DetailEffect['kind']`，
+ * 因为后者还含 `enchant`（那是前端合成的附魔行，不来自 `summaryLines()`）。
+ */
+function isEffectKind(kind: SummaryKind): kind is EffectSummaryKind {
+  return kind === 'active' || kind === 'passive' || kind === 'skill' || kind === 'aura'
+}
+
+/**
+ * 把回显切成"效果区"：剥掉首行（`已加载 …`）、合并附魔行、分组、稳定排序。
+ *
+ * @param effectLines 文本回显（`CardRegistry.summary()`）
+ * @param enchantDef 当前生效附魔（追加到末尾）
+ * @param structured `CardRegistry.summaryLines()` 的结构化行；**给出时按 `kind` 分组**（AG.6 = A），
+ *   不再靠中文前缀猜
+ */
 export function detailEffectsOf(
   effectLines: readonly string[],
   enchantDef?: EnchantDef,
+  structured?: readonly SummaryLine[],
 ): readonly DetailEffect[] {
-  const body = effectLines.slice(1) // 首行 = `已加载 卡名 v1:`，只用于回显标题
-  const rows = body
-    .map((line, index) => ({ line: line.trimStart(), index }))
-    .filter((entry) => entry.line.length > 0)
-    // `[附魔目录]` 是**目录**回显（"这张卡能有哪些附魔"），不是当前效果 —— 不进效果区
-    .filter((entry) => !entry.line.startsWith('[附魔目录]'))
-    .map((entry) => ({ kind: classifyEffectLine(entry.line), text: entry.line, index: entry.index }))
+  const rows: readonly EffectRow[] =
+    structured === undefined
+      ? effectLines
+          .slice(1) // 首行 = `已加载 卡名 v1:`，只用于回显标题
+          .map((line, index) => ({ line: line.trimStart(), index }))
+          .filter((entry) => entry.line.length > 0)
+          // `[附魔目录]` 是**目录**回显（"这张卡能有哪些附魔"），不是当前效果 —— 不进效果区
+          .filter((entry) => !entry.line.startsWith('[附魔目录]'))
+          .map((entry) => ({
+            kind: classifyEffectLine(entry.line),
+            text: entry.line,
+            label: null,
+            trigger: null,
+            result: null,
+            actions: null,
+            index: entry.index,
+          }))
+      : structured.flatMap((line, index) =>
+          // 用 `flatMap` + 类型守卫：`kind` 在这里被收窄成 `DetailEffect['kind']`，
+          // `header` / `enchantCatalog` 直接丢掉（不参与效果区）
+          isEffectKind(line.kind)
+            ? [
+                {
+                  kind: line.kind,
+                  text: line.text.trimStart(),
+                  label: line.label,
+                  trigger: line.trigger,
+                  result: line.result,
+                  actions: line.actions ?? null,
+                  index,
+                },
+              ]
+            : [],
+        )
   // 当前生效附魔的三块效果：合成成 `[附魔] …` 行，接在末尾（kind 排序为最后一段）
-  const enchantRows =
+  const enchantRows: readonly EffectRow[] =
     enchantDef === undefined
       ? []
       : enchantEffectLines(enchantDef).map((text, at) => ({
           kind: 'enchant' as const,
           text,
+          label: null,
+          trigger: null,
+          result: null,
+          actions: null,
           index: rows.length + at,
         }))
   return [...rows, ...enchantRows]
     .sort((left, right) => EFFECT_RANK[left.kind] - EFFECT_RANK[right.kind] || left.index - right.index)
-    .map((entry) => ({ kind: entry.kind, text: entry.text }))
+    // 只有**结构化**来源才带三段（+ 原始动作）；文本来源保持 `{ kind, text }` 的原形状
+    // （既有测试与调用方都按这个形状断言，避免无谓的 `null` 键）
+    .map((entry) => ({
+      kind: entry.kind,
+      text: entry.text,
+      ...(entry.label === null ? {} : { label: entry.label }),
+      ...(entry.trigger === null ? {} : { trigger: entry.trigger }),
+      ...(entry.result === null ? {} : { result: entry.result }),
+      ...(entry.actions === null ? {} : { actions: entry.actions }),
+    }))
 }
 
 /** 编辑态的"基础充满周期"（交给引擎算：`cdp` 已计入；纯被动卡 ⇒ `null`） */
@@ -222,12 +318,17 @@ export function buildCardDetail(input: BuildDetailInput): CardDetailView {
 
   return {
     title: card.name,
-    enchant: detailEnchantOf(card, frame),
+    enchant: detailEnchantOf(card, frame, input.enchantId),
     rarity: { name: input.rarityName, color: input.rarityColor },
     description: card.description === undefined || card.description.length === 0 ? null : card.description,
     stats: detailStatsOf(statSource),
+    values: statSource,
     gauge: detailGauge,
-    effects: detailEffectsOf(input.effectLines, activeEnchantDefOf(card, frame)),
+    effects: detailEffectsOf(
+      input.effectLines,
+      activeEnchantDefOf(card, frame, input.enchantId),
+      input.effects,
+    ),
     foot: {
       tags: card.tags ?? [],
       owner: input.ownerLabel,

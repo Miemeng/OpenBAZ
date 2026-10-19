@@ -14,6 +14,7 @@ import type {
   ActionLog,
   BattleState,
   DotKind,
+  LocaleTable,
   LogLevel,
   LogMessage,
   PlayerId,
@@ -244,12 +245,37 @@ function auraValueText(message: LogMessage): string {
 }
 
 /**
+ * 用 `message.data` 填模板里的 `{参数名}`。
+ *
+ * 参数缺失时与 `dataText` 同一降级口径（写 `?`）；`extra` 里的**派生参数**优先
+ * （例如光环增减量的 `{value}` 需要带符号格式化，不是原始 data）。
+ */
+function fillTemplate(
+  template: string,
+  message: LogMessage,
+  extra: Readonly<Record<string, string>> = {},
+): string {
+  return template.replace(/\{([A-Za-z0-9_]+)\}/gu, (_all: string, key: string) => extra[key] ?? dataText(message, key))
+}
+
+/**
  * 消息文案（**`MessageCode` 的唯一权威**）。
  *
  * 契约：只读 `message.data` / `message.actor`，**不读写任何状态**。返回类型标注为 `string`，
  * 任何漏掉的 code 分支都会被 TS2366 拦住（与 `effectText` 同一手法）。
+ *
+ * 语言表（可选）：`locale[message.code]` 命中即用**模板**渲染（占位符 `{参数名}` 取自
+ * `message.data`，另有派生参数 `{value}`）；**缺表 / 缺键逐条回落本函数的内置中文** ——
+ * 所以不传 `locale` 时输出与引入语言表之前逐字节一致。
+ *
+ * @param message 结构化消息（只存 code + data）
+ * @param locale 语言表（见 `BattleOptions.locale`）；不传 = 内置中文
  */
-export function messageText(message: LogMessage): string {
+export function messageText(message: LogMessage, locale?: LocaleTable): string {
+  const template = locale?.[message.code]
+  if (template !== undefined && template.length > 0) {
+    return fillTemplate(template, message, { value: auraValueText(message) })
+  }
   switch (message.code) {
     case 'skill.no_trigger_no_aura':
       return `技能 ${dataText(message, 'skill')} 既没有触发器（trigger）也没有光环（aura），整局不会有任何结算`
@@ -276,11 +302,13 @@ export function messageText(message: LogMessage): string {
  *
  * 前缀口径与 `formatAction` 一致（`[t= 12|  2.4s]`），其后依次是：级别标签、可选阵营、
  * 可选行动主体、**消息码**、文案 —— code 落进文本是刻意的：日志文件要能按码检索。
+ *
+ * @param locale 语言表；不传 = 用 `state.locale`（再没有 = 内置中文）
  */
-export function formatMessage(state: BattleState, message: LogMessage): string {
+export function formatMessage(state: BattleState, message: LogMessage, locale?: LocaleTable): string {
   const absoluteCs = message.tick * TRIGGER_FRAME_CS
   const header = `[t=${String(message.tick).padStart(3, ' ')}|${formatSeconds(csToSeconds(absoluteCs)).padStart(6, ' ')}] `
   const side = message.side === undefined ? '' : `[${SIDE_SHORT[message.side]}方] `
   const actor = message.actor === undefined ? '' : `${actorNameOf(state, message.actor)} `
-  return `${header}[${LEVEL_TAG[message.level]}] ${side}${actor}${message.code}：${messageText(message)}`
+  return `${header}[${LEVEL_TAG[message.level]}] ${side}${actor}${message.code}：${messageText(message, locale ?? state.locale)}`
 }

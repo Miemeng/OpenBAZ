@@ -1,0 +1,19 @@
+# 维护包（maintainPack）· 中 · 黄金 —— **纯光环**：不写任何 abilities
+#
+# 教学点：「不行动也有用」—— `aura` 在**触发帧边界**重建读数，不需要行动条。
+#        两个光环（攻击 +10 / 护盾 +10）写在同一份 `apply` 里。
+id: maintainPack
+name: 维护包
+version: 2
+size: medium
+cooldown: -1             # 纯被动 / 纯光环：不参与行动条（-1 = 没有主动）
+rarity: gold
+description: 不出手也有用：己方全体卡牌攻击 +10、护盾 +10。
+
+tags: [supply]
+
+aura:
+  select: all_own_cards
+  apply:
+    - { stat: atk, amount: 10 }
+    - { stat: shield, amount: 10 }

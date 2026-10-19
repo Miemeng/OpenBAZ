@@ -2,7 +2,7 @@
 
 // 占格数直接问引擎的 `slotsForCard()`（`engine/board.ts` 的纯函数，浏览器侧可用）
 // 前端**不复制**"小 1 / 中 2 / 大 3 + 卡面 slots 覆盖"这条规则；
-// "格 → 单位列"的换算走 `state/boardUnits.ts`（与回放态**同一份口径**：1 格 = 2 列、一行 3 行高）。
+// "格 → 单位列"的换算走 `state/boardUnits.ts`（与回放态**同一份口径**：1 格 = 2 列、一行 4 行高）。
 
 // 交互（改为"选卡 → 点格子"，不再跟随指针拖拽）：
 //   · 每一格都是一个按钮，带 `data-board-slot` / `data-side`；点它把格号回传给容器（`onSlotClick`）；
@@ -76,7 +76,7 @@ export function BoardRow({
 
       {/* 10 个格位 + 叠在上面的卡：用 CSS grid 的 `grid-column: 起点 / span 占格` 摆位，
           所以"卡占了几格"这件事**只由 `slotsForCard` 决定**，样式里不再写第二份。
-          单位网格见 `state/boardUnits.ts`：一格 = 2 列、一行 = 3 行高。 */}
+          单位网格见 `state/boardUnits.ts`：一格 = 2 列、一行 = 4 行高。 */}
       <div
         className="board-row"
         data-side={side}
@@ -136,7 +136,8 @@ export function BoardRow({
               role="button"
               tabIndex={0}
               onMouseEnter={(event) => {
-                detailApi?.enter(card, undefined, { x: event.clientX, y: event.clientY })
+                // 编辑态没有帧快照 ⇒ 把**草稿里这一处的附魔**带过去，悬浮窗才显示"附魔：壁垒"
+                detailApi?.enter(card, undefined, { x: event.clientX, y: event.clientY }, placement.enchant)
               }}
               onMouseLeave={() => {
                 detailApi?.leave()

@@ -60,7 +60,13 @@ function renderCondition(condition: Condition): string {
   return `(${condition.all.map((item) => renderCondition(item)).join(' 且 ')})`
 }
 
-function renderSelector(selector: string | SelectorQuery): string {
+/**
+ * 选择器 → 参数式文本（`all_enemy_cards` 原样、查询对象写成 `{side=…, zone=…}`）。
+ *
+ * 这条是**机器口径**（给人排查用，不是人话）；前端的人话版本在 `client/i18n/effectText.ts`，
+ * 只在查询对象这类高级写法上回落到这里。
+ */
+export function renderSelector(selector: string | SelectorQuery): string {
   if (typeof selector === 'string') return selector
   const parts: string[] = []
   if (selector.side !== undefined) parts.push(`side=${selector.side}`)
@@ -90,10 +96,20 @@ function renderAction(action: ActionSpec): string {
   return parts.join('，')
 }
 
+/**
+ * 光环平铺数额的展示文本：字面量沿用 `+2` / `-1`；表达式写成 `=self.atk` / `=(self.atk + 2)`。
+ *
+ * 客户端（`client/state/cardDetail.ts` 的附魔效果行）与 CLI 共用这一份，免得两处格式不同。
+ */
+export function renderAuraAmount(amount: Expr): string {
+  if (typeof amount === 'number') return `${amount >= 0 ? '+' : ''}${String(amount)}`
+  return `=${renderExpr(amount)}`
+}
+
 function renderAura(aura: AuraDef): string {
   const parts: string[] = [`作用于 ${renderSelector(aura.select)}`]
   if (aura.apply !== undefined) {
-    parts.push(`平铺 ${aura.apply.map((entry) => `${entry.stat}${entry.amount >= 0 ? '+' : ''}${entry.amount}`).join('、')}`)
+    parts.push(`平铺 ${aura.apply.map((entry) => `${entry.stat}${renderAuraAmount(entry.amount)}`).join('、')}`)
   }
   if (aura.mul !== undefined) {
     parts.push(`倍率 ${aura.mul.map((entry) => `${entry.stat}×${entry.factor}`).join('、')}`)
@@ -102,39 +118,113 @@ function renderAura(aura: AuraDef): string {
   return parts.join('，')
 }
 
-function renderAbility(ability: Ability): string {
+/**
+ * 回显行的类型（AG.6 = A）：给前端**结构化**分组用，不靠中文前缀猜。
+ *
+ * `text` 与旧输出**逐字符一致**（CLI 仍打印它）；`label` / `trigger` / `result` 是同一行的三段，
+ * 供「触发器 ▶ 结果」渲染（`client/components/EffectLine.tsx`）。
+ */
+export type SummaryKind = 'header' | 'active' | 'passive' | 'skill' | 'aura' | 'enchantCatalog'
+
+export interface SummaryLine {
+  readonly kind: SummaryKind
+  /** 行首标签（`主动` / `被动 P10` / `技能 P5` / `光环` / `附魔目录`）；`header` 为 `null` */
+  readonly label: string | null
+  /** 触发器侧（`时机 …` / `行动条充满时` …）；`header` / `附魔目录` 为 `null` */
+  readonly trigger: string | null
+  /** 结果侧（动作串）；没有箭头（光环 / 附魔目录）为 `null` */
+  readonly result: string | null
+  /** 整行文本（与旧 `summary()` 输出逐字符一致，CLI 用） */
+  readonly text: string
+  /**
+   * **原始动作数组**（只有主动 / 被动 / 技能行带；`header` / 光环 / 附魔目录没有）。
+   *
+   * 用途 = 前端把动作渲染成自然句（F9 = A），CLI **不看**这个字段（它只打印 `text`）。
+   * 带这一份就够：目标、数值、状态、时长都在动作里，前端不必再解析 `result` 那串参数文本。
+   */
+  readonly actions?: readonly ActionSpec[]
+}
+
+/** 加载回显。措辞是机器可读的紧凑形式，时机词的中文说法留待落地。 */
+function cardSummary(card: CardDef): SummaryLine[] {
+  const lines: SummaryLine[] = [
+    { kind: 'header', label: null, trigger: null, result: null, text: `已加载 ${card.name} v${card.version}:` },
+  ]
+  for (const ability of card.abilities ?? []) lines.push(abilitySummary(ability))
+  if (card.aura !== undefined) lines.push(auraSummary(card.aura))
+  const enchantments = card.enchantments ?? []
+  if (enchantments.length > 0) {
+    const body = `${enchantments.map((enchant) => enchant.id).join(' / ')}（仅目录；生效需 do: enchant 施加）`
+    lines.push({
+      kind: 'enchantCatalog',
+      label: '附魔目录',
+      trigger: null,
+      result: null,
+      text: `  [附魔目录] ${body}`,
+    })
+  }
+  return lines
+}
+
+/** 一条能力（主动 / 被动）：标签 + 触发器侧 + 结果侧。 */
+function abilitySummary(ability: Ability): SummaryLine {
   const kind = ability.kind === 'passive' ? `被动 P${ability.priority ?? 5}` : '主动'
-  const timing =
+  // CLI 文本保留"行动条充满时"这个说法（与旧输出逐字符一致）；
+  // 但**结构化 trigger 对主动不再重复这句话** —— 主动的"触发器"就是"条满"，写出来是废话。
+  const cliTiming =
     ability.trigger !== undefined
       ? `时机 ${ability.trigger.event}`
       : ability.kind === 'active'
         ? '行动条充满时'
         : '未绑时机'
+  const uiTiming =
+    ability.trigger !== undefined ? `时机 ${ability.trigger.event}` : ability.kind === 'active' ? '' : '未绑时机'
   const every = ability.everyN !== undefined ? `（每 ${ability.everyN} 次）` : ''
   const condition = ability.condition !== undefined ? `，条件 ${renderCondition(ability.condition)}` : ''
-  const actions = ability.actions.map((action) => renderAction(action)).join('；')
-  return `  [${kind}] ${timing}${every}${condition} → ${actions}`
-}
-
-/** 加载回显。措辞是机器可读的紧凑形式，时机词的中文说法留待落地。 */
-function cardSummary(card: CardDef): string[] {
-  const lines: string[] = [`已加载 ${card.name} v${card.version}:`]
-  for (const ability of card.abilities ?? []) lines.push(renderAbility(ability))
-  if (card.aura !== undefined) lines.push(`  [光环] ${renderAura(card.aura)}`)
-  const enchantments = card.enchantments ?? []
-  if (enchantments.length > 0) {
-    lines.push(`  [附魔目录] ${enchantments.map((enchant) => enchant.id).join(' / ')}（仅目录；生效需 do: enchant 施加）`)
+  const tail = `${every}${condition}`
+  const result = ability.actions.map((action) => renderAction(action)).join('；')
+  // 主动的 trigger 只剩"每 N 次 / 条件"这类附加信息；没有就 null（不画箭头前的文字）
+  const structured = `${uiTiming}${tail}`
+  const trigger = structured.length === 0 ? null : structured.startsWith('，') ? structured.slice(1) : structured
+  return {
+    kind: ability.kind,
+    label: kind,
+    trigger,
+    result,
+    text: `  [${kind}] ${cliTiming}${tail} → ${result}`,
+    actions: ability.actions,
   }
-  return lines
 }
 
-function skillSummary(skill: SkillDef): string[] {
-  const lines: string[] = [`已加载 技能 ${skill.name} v${skill.version}:`]
+/** 一条光环（没有"结果侧"：整段都是作用描述）。 */
+function auraSummary(aura: AuraDef): SummaryLine {
+  const body = renderAura(aura)
+  return { kind: 'aura', label: '光环', trigger: body, result: null, text: `  [光环] ${body}` }
+}
+
+function skillSummary(skill: SkillDef): SummaryLine[] {
+  const lines: SummaryLine[] = [
+    {
+      kind: 'header',
+      label: null,
+      trigger: null,
+      result: null,
+      text: `已加载 技能 ${skill.name} v${skill.version}:`,
+    },
+  ]
   const timing = skill.trigger !== undefined ? `时机 ${skill.trigger.event}` : '未绑时机'
   const condition = skill.condition !== undefined ? `，条件 ${renderCondition(skill.condition)}` : ''
-  const actions = skill.actions.map((action) => renderAction(action)).join('；')
-  lines.push(`  [技能 P${skill.priority ?? 5}] ${timing}${condition} → ${actions}`)
-  if (skill.aura !== undefined) lines.push(`  [光环] ${renderAura(skill.aura)}`)
+  const trigger = `${timing}${condition}`
+  const result = skill.actions.map((action) => renderAction(action)).join('；')
+  lines.push({
+    kind: 'skill',
+    label: `技能 P${skill.priority ?? 5}`,
+    trigger,
+    result,
+    text: `  [技能 P${skill.priority ?? 5}] ${trigger} → ${result}`,
+    actions: skill.actions,
+  })
+  if (skill.aura !== undefined) lines.push(auraSummary(skill.aura))
   return lines
 }
 
@@ -181,13 +271,18 @@ export class CardRegistry {
     return { cards, skills }
   }
 
-  /** 加载回显文本：卡牌优先，其次技能；都没命中给一行"未找到"。 */
-  summary(id: string): string[] {
+  /** 加载回显的**结构化行**（AG.6 = A：前端按 `kind` 分组，不再靠中文前缀）。 */
+  summaryLines(id: string): SummaryLine[] {
     const card = this.get(id)
     if (card !== undefined) return cardSummary(card)
     const skill = this.getSkill(id)
     if (skill !== undefined) return skillSummary(skill)
-    return [`未找到：${id}`]
+    return [{ kind: 'header', label: null, trigger: null, result: null, text: `未找到：${id}` }]
+  }
+
+  /** 加载回显文本：卡牌优先，其次技能；都没命中给一行"未找到"。 */
+  summary(id: string): string[] {
+    return this.summaryLines(id).map((line) => line.text)
   }
 
   // ——— 注册 —
